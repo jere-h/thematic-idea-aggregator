@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="TrendDeck \u2014 run one studio trend-voting round entirely in the browser: import signals, group them into trend cards, vote head-to-head, and export a two-page Trend Brief. No backend." />
+  <title>TrendDeck \u2014 Studio Trend Voting Brief Builder</title>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="css/app.css" />
+
+  <!-- Third-party libraries (CDN). PapaParse is required for CSV import;
+       jsPDF is optional \u2014 the app degrades to window.print() if it fails to load. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+  <!-- Application modules. Load order matters:
+       sample-data (bundled seed) \u2192 store (persistence/seeding) \u2192 feature modules \u2192 router boot.
+       `defer` preserves order and runs after the DOM is parsed. -->
+  <script defer src="js/sample-data.js"></script>
+  <script defer src="js/store.js"></script>
+  <script defer src="js/ingestion.js"></script>
+  <script defer src="js/cards.js"></script>
+  <script defer src="js/voting.js"></script>
+  <script defer src="js/dashboard.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- ============================ APP CHROME ============================ -->
+  <header class="app-header" data-print-hide>
+    <div class="app-header__brand">
+      <span class="app-header__logo" aria-hidden="true">\u25C8</span>
+      <div class="app-header__titles">
+        <h1 class="app-header__title">TrendDeck</h1>
+        <p class="app-header__subtitle">Studio Trend Voting Brief Builder</p>
+      </div>
+    </div>
+
+    <div class="app-header__round" id="round-meta" aria-live="polite">
+      <span class="round-pill" id="round-name-pill">Loading round\u2026</span>
+    </div>
+
+    <nav class="app-nav" aria-label="Primary">
+      <a class="app-nav__link" href="#/round"     data-route="round">Signals</a>
+      <a class="app-nav__link" href="#/cards"     data-route="cards">Trend Cards</a>
+      <a class="app-nav__link" href="#/vote"      data-route="vote">Vote</a>
+      <a class="app-nav__link" href="#/dashboard" data-route="dashboard">Dashboard</a>
+      <a class="app-nav__link" href="#/brief"     data-route="brief">Brief</a>
+    </nav>
+  </header>
+
+  <!-- Banner shown when the bundled example round is active. JS hides it once
+       the user creates their own round. -->
+  <div class="sample-banner" id="sample-banner" data-print-hide hidden>
+    <span class="sample-banner__badge">EXAMPLE DATA</span>
+    <span class="sample-banner__text">
+      You\u2019re viewing a pre-loaded sample round (signals, trend cards &amp; votes) so you can see the whole flow.
+    </span>
+    <button type="button" class="btn btn--ghost btn--sm" id="sample-banner__clear">Clear &amp; start my own round</button>
+  </div>
+
+  <!-- ============================ VIEWS ============================ -->
+  <main id="main" class="app-main" tabindex="-1">
+
+    <!-- ROUND / SIGNALS view (owned by js/ingestion.js) -->
+    <section class="view" id="view-round" data-view="round" hidden>
+      <div class="view__head">
+        <h2 class="view__title">Signals</h2>
+        <p class="view__lede">Collect candidate trend signals for this round. Paste them in one at a time or import a CSV.</p>
+      </div>
+      <div class="view__body" id="ingestion-root">
+        <p class="view__placeholder">Loading signals\u2026</p>
+      </div>
+    </section>
+
+    <!-- TREND CARDS view (owned by js/cards.js) -->
+    <section class="view" id="view-cards" data-view="cards" hidden>
+      <div class="view__head">
+        <h2 class="view__title">Trend Cards</h2>
+        <p class="view__lede">Group signals into named trend cards, or paste a clustering JSON from your own Claude session.</p>
+      </div>
+      <div class="view__body" id="cards-root">
+        <p class="view__placeholder">Loading trend cards\u2026</p>
+      </div>
+    </section>
+
+    <!-- VOTE view (owned by js/voting.js) -->
+    <section class="view" id="view-vote" data-view="vote" hidden>
+      <div class="view__head">
+        <h2 class="view__title">Head-to-Head Vote</h2>
+        <p class="view__lede">Anonymous voting \u2014 pick the stronger trend in each pair. 6\u201310 quick match-ups per session.</p>
+      </div>
+      <div class="view__body" id="voting-root">
+        <p class="view__placeholder">Loading ballot\u2026</p>
+      </div>
+    </section>
+
+    <!-- DASHBOARD view (owned by js/dashboard.js) -->
+    <section class="view" id="view-dashboard" data-view="dashboard" hidden>
+      <div class="view__head">
+        <h2 class="view__title">Consensus Dashboard</h2>
+        <p class="view__lede">Win-rate leaderboard, by-department breakdown, and the export to a printable Trend Brief.</p>
+      </div>
+      <div class="view__body" id="dashboard-root">
+        <p class="view__placeholder">Loading results\u2026</p>
+      </div>
+    </section>
+
+    <!-- BRIEF view \u2014 the print-styled two-page deliverable (owned by js/dashboard.js) -->
+    <section class="view" id="view-brief" data-view="brief" hidden>
+      <div class="view__head" data-print-hide>
+        <h2 class="view__title">Trend Brief</h2>
+        <p class="view__lede">A two-page summary ready to print or save as PDF.</p>
+      </div>
+      <div class="view__body brief-sheet" id="brief-root">
+        <p class="view__placeholder">Building brief\u2026</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================ FOOTER ============================ -->
+  <footer class="app-footer" data-print-hide>
+    <div class="app-footer__actions">
+      <button type="button" class="btn btn--ghost btn--sm" id="action-export-round">Export round file</button>
+      <label class="btn btn--ghost btn--sm" for="action-import-round">Import round file
+        <input type="file" id="action-import-round" accept="application/json,.json" hidden />
+      </label>
+      <button type="button" class="btn btn--ghost btn--sm" id="action-share-link">Copy share link</button>
+    </div>
+    <p class="app-footer__note">
+      TrendDeck runs entirely in your browser. All data lives in this device\u2019s localStorage \u2014 nothing is sent to a server.
+    </p>
+  </footer>
+
+  <!-- Transient toast region for copy/export feedback -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- ====================== ROUTER + BOOTSTRAP ======================
+       Minimal hash router kept inline so the shell is self-sufficient.
+       Each feature module exposes a global `render(rootEl, round)` namespace
+       and listens for the `trenddeck:render` event; the router toggles which
+       <section data-view> is visible and re-broadcasts the active round.
+       On first load with empty storage, store.js seeds the bundled sample
+       round, so the full UI paints immediately. -->
+  <script>
+  (function () {
+    'use strict';
+
+    var ROUTES = ['round', 'cards', 'vote', 'dashboard', 'brief'];
+    var DEFAULT_ROUTE = 'round';
+
+    function currentRoute() {
+      var hash = (window.location.hash || '').replace(/^#\/?/, '').trim();
+      return ROUTES.indexOf(hash) !== -1 ? hash : DEFAULT_ROUTE;
+    }
+
+    function activeRound() {
+      // store.js (loaded with defer, before this inline script runs at DOMContentLoaded)
+      // exposes window.TrendStore. Guard in case it failed to load.
+      try {
+        if (window.TrendStore && typeof window.TrendStore.getActiveRound === 'function') {
+          return window.TrendStore.getActiveRound();
+        }
+      } catch (err) {
+        console.error('TrendDeck: could not read active round', err);
+      }
+      return null;
+    }
+
+    function showView(route) {
+      var sections = document.querySelectorAll('.view');
+      for (var i = 0; i < sections.length; i++) {
+        var el = sections[i];
+        var match = el.getAttribute('data-view') === route;
+        el.hidden = !match;
+      }
+      var links = document.querySelectorAll('.app-nav__link');
+      for (var j = 0; j < links.length; j++) {
+        var link = links[j];
+        link.classList.toggle('is-active', link.getAttribute('data-route') === route);
+      }
+      // Notify feature modules to (re)render for the active route + round.
+      var round = activeRound();
+      document.dispatchEvent(new CustomEvent('trenddeck:render', {
+        detail: { route: route, round: round }
+      }));
+      updateRoundMeta(round);
+      updateSampleBanner(round);
+    }
+
+    function updateRoundMeta(round) {
+      var pill = document.getElementById('round-name-pill');
+      if (!pill) return;
+      if (round && round.name) {
+        pill.textContent = round.name + (round.closed ? ' \u00b7 closed' : '');
+      } else {
+        pill.textContent = 'No active round';
+      }
+    }
+
+    function updateSampleBanner(round) {
+      var banner = document.getElementById('sample-banner');
+      if (!banner) return;
+      var isSample = !!(round && (round.isSample || round.sample));
+      banner.hidden = !isSample;
+    }
+
+    // ---- Global helpers other modules can reuse ----
+    window.TrendDeck = window.TrendDeck || {};
+    window.TrendDeck.go = function (route) {
+      window.location.hash = '#/' + (ROUTES.indexOf(route) !== -1 ? route : DEFAULT_ROUTE);
+    };
+    window.TrendDeck.refresh = function () { showView(currentRoute()); };
+    window.TrendDeck.toast = function (message, ms) {
+      var t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = message;
+      t.hidden = false;
+      t.classList.add('is-visible');
+      window.clearTimeout(window.TrendDeck.__toastTimer);
+      window.TrendDeck.__toastTimer = window.setTimeout(function () {
+        t.classList.remove('is-visible');
+        window.setTimeout(function () { t.hidden = true; }, 250);
+      }, ms || 2200);
+    };
+
+    // ---- Footer / banner wiring (delegates to store.js where available) ----
+    function wireChrome() {
+      var exportBtn = document.getElementById('action-export-round');
+      if (exportBtn) {
+        exportBtn.addEventListener('click', function () {
+          if (window.TrendStore && window.TrendStore.exportRoundFile) {
+            window.TrendStore.exportRoundFile();
+          } else {
+            window.TrendDeck.toast('Export unavailable');
+          }
+        });
+      }
+
+      var importInput = document.getElementById('action-import-round');
+      if (importInput) {
+        importInput.addEventListener('change', function (evt) {
+          var file = evt.target.files && evt.target.files[0];
+          if (!file) return;
+          if (window.TrendStore && window.TrendStore.importRoundFile) {
+            window.TrendStore.importRoundFile(file, function (ok, msg) {
+              window.TrendDeck.toast(msg || (ok ? 'Round imported' : 'Import failed'));
+              if (ok) window.TrendDeck.refresh();
+            });
+          } else {
+            window.TrendDeck.toast('Import unavailable');
+          }
+          importInput.value = '';
+        });
+      }
+
+      var shareBtn = document.getElementById('action-share-link');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', function () {
+          var link = (window.TrendStore && window.TrendStore.encodeShareLink)
+            ? window.TrendStore.encodeShareLink()
+            : window.location.href;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(function () {
+              window.TrendDeck.toast('Share link copied to clipboard');
+            }, function () {
+              window.TrendDeck.toast('Copy failed \u2014 link: ' + link);
+            });
+          } else {
+            window.prompt('Copy this share link:', link);
+          }
+        });
+      }
+
+      var clearBtn = document.getElementById('sample-banner__clear');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          var ok = window.confirm('Clear the sample round and start an empty round of your own? This removes the example signals, cards and votes.');
+          if (!ok) return;
+          if (window.TrendStore && window.TrendStore.startBlankRound) {
+            window.TrendStore.startBlankRound();
+          } else if (window.TrendStore && window.TrendStore.clearAll) {
+            window.TrendStore.clearAll();
+          }
+          window.TrendDeck.go('round');
+          window.TrendDeck.refresh();
+          window.TrendDeck.toast('Started a fresh round');
+        });
+      }
+    }
+
+    function boot() {
+      // Ensure storage is seeded (store.js seeds the bundled sample on first run).
+      try {
+        if (window.TrendStore && typeof window.TrendStore.init === 'function') {
+          window.TrendStore.init();
+        }
+      } catch (err) {
+        console.error('TrendDeck: store init failed', err);
+      }
+      wireChrome();
+      if (!window.location.hash) {
+        window.location.replace('#/' + DEFAULT_ROUTE);
+      }
+      showView(currentRoute());
+    }
+
+    window.addEventListener('hashchange', function () { showView(currentRoute()); });
+    // store.js may broadcast data changes; keep the active view fresh.
+    document.addEventListener('trenddeck:datachanged', function () { window.TrendDeck.refresh(); });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
+    }
+  })();
+  </script>
+</body>
+</html>
