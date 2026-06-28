@@ -162,36 +162,22 @@
     if (Array.isArray(s.cards)) return s.cards;
     var round = getRound();
     if (round && Array.isArray(round.cards)) return round.cards;
-    try {
-      var ls = localStorage.getItem('trenddeck:cards');
-      if (ls) return JSON.parse(ls);
-    } catch (e) { /* ignore */ }
     return [];
   }
 
+  // store.setCards(roundId, cards) is roundId-first; pass null to mean
+  // "active round". It is the single source of truth — no divergent
+  // localStorage fallback so a failed write is visible (an empty gallery)
+  // rather than masked by a key nothing else reads.
   function persistCards(cards) {
     var s = S();
-    var setters = ['setCards', 'saveCards', 'replaceCards', 'putCards', 'updateCards'];
-    for (var i = 0; i < setters.length; i++) {
-      if (typeof s[setters[i]] === 'function') {
-        try { s[setters[i]](cards); announceChanged(); return; }
-        catch (e) { console.warn('[cards] Store.' + setters[i] + ' failed', e); }
-      }
+    if (s && typeof s.setCards === 'function') {
+      s.setCards(null, cards);
+      announceChanged();
+      return;
     }
-    var round = getRound();
-    if (round) {
-      round.cards = cards;
-      var roundSetters = ['saveRound', 'updateRound', 'putRound', 'setRound'];
-      for (var j = 0; j < roundSetters.length; j++) {
-        if (typeof s[roundSetters[j]] === 'function') {
-          try { s[roundSetters[j]](round); announceChanged(); return; }
-          catch (e2) { console.warn('[cards] Store.' + roundSetters[j] + ' failed', e2); }
-        }
-      }
-    }
-    // Last-resort durable fallback so cards survive reload.
-    try { localStorage.setItem('trenddeck:cards', JSON.stringify(cards)); }
-    catch (e3) { console.warn('[cards] localStorage fallback failed', e3); }
+    // No store available — do not write anywhere; just re-render against
+    // whatever the store reports (the honest state when there is no store).
     announceChanged();
   }
 
@@ -648,7 +634,7 @@
         '<details class="member-details">' +
           '<summary>Members (' + members.length + ')</summary>' +
           '<ul class="member-list">' + (memberChips || '<li class="muted">No signals in this card.</li>') + '</ul>' +
-          '<button class="btn btn-small" type="button" data-action="add-selected" ' +
+          '<button class="btn btn--sm" type="button" data-action="add-selected" ' +
             'data-card="' + esc(card.id) + '">+ Add checked signals</button>' +
         '</details>' +
       '</article>';
@@ -697,8 +683,8 @@
       '<label class="inline-check"><input type="checkbox" data-action="toggle-replace"' +
         (ui.replaceOnImport ? ' checked' : '') + '> Replace existing cards (uncheck to append)</label>' +
       '<div class="importer-actions">' +
-        '<button class="btn btn-primary" type="button" data-action="do-import">Validate &amp; import</button>' +
-        '<button class="btn" type="button" data-action="toggle-import">Cancel</button>' +
+        '<button class="btn btn--primary" type="button" data-action="do-import">Validate &amp; import</button>' +
+        '<button class="btn btn--ghost" type="button" data-action="toggle-import">Cancel</button>' +
       '</div>' +
     '</section>';
   }
@@ -736,18 +722,18 @@
       '<div class="cards-view">' +
         '<header class="view-head">' +
           '<div>' +
-            '<h2>Trend cards ' + sampleBadge + '</h2>' +
             '<p class="muted">' + cards.length + ' card' + (cards.length === 1 ? '' : 's') +
               ' \u00b7 ' + signals.length + ' signal' + (signals.length === 1 ? '' : 's') +
-              ' \u00b7 ' + ungrouped.length + ' ungrouped \u00b7 suggested target ~' + target + ' cards</p>' +
+              ' \u00b7 ' + ungrouped.length + ' ungrouped \u00b7 suggested target ~' + target + ' cards' +
+              (sampleBadge ? ' ' + sampleBadge : '') + '</p>' +
           '</div>' +
           '<div class="view-actions">' +
-            '<button class="btn" type="button" data-action="toggle-import">' +
+            '<button class="btn btn--secondary" type="button" data-action="toggle-import">' +
               (ui.showImporter ? 'Hide importer' : 'Import clustering JSON') + '</button>' +
-            '<button class="btn btn-primary" type="button" data-action="new-card"' +
+            '<button class="btn btn--primary" type="button" data-action="new-card"' +
               (selCount ? '' : ' disabled') + '>' +
               (selCount ? 'New card from ' + selCount + ' selected' : 'New card (select signals)') + '</button>' +
-            (cards.length ? '<button class="btn btn-ghost danger" type="button" data-action="clear-cards">Clear all</button>' : '') +
+            (cards.length ? '<button class="btn btn--ghost btn--danger" type="button" data-action="clear-cards">Clear all</button>' : '') +
           '</div>' +
         '</header>' +
 

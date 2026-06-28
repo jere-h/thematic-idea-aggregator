@@ -25,6 +25,19 @@
 (function (global) {
   'use strict';
 
+  // Below ~12 recorded votes the head-to-head spread is statistically trivial
+  // for a studio round (~one voter completing one MIN_PAIRS=6 session twice).
+  var LOW_CONFIDENCE_VOTES = 12;
+
+  // Anonymous / non-department buckets that must never occupy a department
+  // card or appear in the "suppressed" list. voteDepartment() maps blank to
+  // 'Unspecified'; voting.js sends the literal 'Prefer not to say' (ANON_DEPT).
+  var NON_DEPARTMENTS = {
+    'Prefer not to say': true,
+    'Unspecified': true,
+    'Anonymous': true
+  };
+
   /* ------------------------------------------------------------------ *
    * Store / round access (defensive across possible store shapes)
    * ------------------------------------------------------------------ */
@@ -72,8 +85,9 @@
       deptSuppressionThreshold:
         numberOr(settings.deptSuppressionThreshold,
           numberOr(settings.deptThreshold,
-            numberOr(settings.smallDeptThreshold, 3))),
-      roundClosed: !!(settings.roundClosed || (round && round.closed))
+            numberOr(settings.smallDeptThreshold, 2))),
+      roundClosed: !!(settings.closed || settings.roundClosed ||
+        (round && round.closed))
     };
   }
 
@@ -264,7 +278,9 @@
 
   function computeDepartments(round) {
     round = round || getRound();
-    if (!round) return { departments: [], suppressed: [], threshold: 0 };
+    if (!round) {
+      return { departments: [], suppressed: [], threshold: 0, realDeptCount: 0 };
+    }
     var settings = getSettings(round);
     var threshold = settings.deptSuppressionThreshold;
     var index = buildCardIndex(round);
@@ -305,10 +321,15 @@
 
     var departments = [];
     var suppressed = [];
+    var realDeptCount = 0;
 
     Object.keys(groups).forEach(function (dept) {
+      // Fold anonymous / non-department buckets out of the grid entirely:
+      // they form neither a visible dept card nor a "suppressed" entry.
+      if (NON_DEPARTMENTS[dept]) return;
       var g = groups[dept];
       var voterCount = Object.keys(g.voters).length;
+      realDeptCount++;
       // Build ranked card list for this department.
       var cards = Object.keys(g.cardStats).map(function (id) {
         var cs = g.cardStats[id];
@@ -339,7 +360,12 @@
     departments.sort(function (a, b) { return b.votes - a.votes; });
     suppressed.sort(function (a, b) { return b.votes - a.votes; });
 
-    return { departments: departments, suppressed: suppressed, threshold: threshold };
+    return {
+      departments: departments,
+      suppressed: suppressed,
+      threshold: threshold,
+      realDeptCount: realDeptCount
+    };
   }
 
   function totals(round) {
@@ -351,6 +377,20 @@
     };
   }
 
+  // Turn an ISO/date value into e.g. "June 22, 2026"; '' for missing/invalid.
+  function formatBriefDate(value) {
+    if (!value) return '';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    try {
+      return d.toLocaleDateString(undefined, {
+        year: 'numeric', month: 'long', day: 'numeric'
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
   function isSampleRound(round) {
     if (!round) return false;
     return !!(round.isSample || round.sample || round.demo ||
@@ -358,19 +398,161 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Signal resolution (resolve a user card's signalIds against the round's
+   * signals at RENDER time — never mutate the persisted card shape). Mirrors
+   * store.normalizeSignal field names (id / sourceUrl / thumbnailUrl / platform
+   * / theme) and store.platformFromHost's host->platform mapping.
+   * ------------------------------------------------------------------ */
+
+  function buildSignalIndex(round) {
+    var byId = {};
+    (round && round.signals ? round.signals : []).forEach(function (sig) {
+      if (!sig || typeof sig !== 'object') return;
+      var id = firstOf(sig, 'id', 'signalId', 'signal_id');
+      if (id === undefined) return;
+      byId[String(id)] = sig;
+    });
+    return { byId: byId };
+  }
+
+  function sigTheme(sig) {
+    return firstOf(sig, 'theme', 'label', 'title', 'name') || '';
+  }
+  function sigUrl(sig) {
+    return firstOf(sig, 'sourceUrl', 'url', 'source', 'href', 'link') || '';
+  }
+  function sigThumbUrl(sig) {
+    return firstOf(sig, 'thumbnailUrl', 'thumbnail', 'image', 'imageUrl', 'img') || '';
+  }
+
+  // Mirror of store.js platformFromHost (same mapping); '' host -> 'Web'.
+  function platformFromHost(url) {
+    var v = String(url || '').trim();
+    if (!v) return '';
+    var host = '';
+    try {
+      host = new URL(v).hostname.toLowerCase().replace(/^www\./, '');
+    } catch (e) {
+      return '';
+    }
+    if (!host) return '';
+    var map = [
+      ['instagram.com', 'Instagram'],
+      ['tiktok.com', 'TikTok'],
+      ['pinterest.', 'Pinterest'],
+      ['behance.net', 'Behance'],
+      ['dribbble.com', 'Dribbble'],
+      ['youtube.com', 'YouTube'],
+      ['youtu.be', 'YouTube'],
+      ['twitter.com', 'X / Twitter'],
+      ['x.com', 'X / Twitter'],
+      ['threads.net', 'Threads'],
+      ['vimeo.com', 'Vimeo'],
+      ['are.na', 'Are.na'],
+      ['arena.com', 'Are.na'],
+      ['medium.com', 'Medium'],
+      ['substack.com', 'Substack'],
+      ['reddit.com', 'Reddit'],
+      ['wgsn.com', 'WGSN'],
+      ['notjustalabel', 'NJAL'],
+      ['cosmos.so', 'Cosmos'],
+      ['savee.it', 'Savee']
+    ];
+    for (var i = 0; i < map.length; i++) {
+      if (host.indexOf(map[i][0]) !== -1) return map[i][1];
+    }
+    var parts = host.split('.');
+    var base = parts.length >= 2 ? parts[parts.length - 2] : host;
+    if (!base) return '';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+
+  function sigPlatform(sig) {
+    var p = firstOf(sig, 'platform');
+    if (p) return String(p).trim();
+    var fromUrl = platformFromHost(sigUrl(sig));
+    return fromUrl || 'Web';
+  }
+
+  // Resolve a card's member signalIds against the index, in card order.
+  function resolveMembers(card, index) {
+    var out = [];
+    if (!index) return out;
+    cardSignals(card).forEach(function (ref) {
+      var id = (ref && typeof ref === 'object') ? cardId(ref) : ref;
+      if (id === undefined || id === null) return;
+      var sig = index.byId[String(id)];
+      if (sig) out.push(sig);
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Inline-SVG placeholder (ported from ingestion.js; module-private copy
+   * so user cards show designed imagery instead of letter-only monograms).
+   * ------------------------------------------------------------------ */
+
+  function hashStr(str) {
+    var h = 5381;
+    str = String(str || '');
+    for (var i = 0; i < str.length; i++) {
+      h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+  }
+
+  function placeholderSvg(text) {
+    var h = hashStr(text);
+    var hue = h % 360;
+    var hue2 = (hue + 40) % 360;
+    var label = esc(initials(text));
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="' + label + '">' +
+        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0" stop-color="hsl(' + hue + ',62%,46%)"/>' +
+          '<stop offset="1" stop-color="hsl(' + hue2 + ',58%,32%)"/>' +
+        '</linearGradient></defs>' +
+        '<rect width="320" height="200" fill="url(#g)"/>' +
+        '<text x="160" y="112" text-anchor="middle" font-family="' +
+          '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif" ' +
+          'font-size="72" font-weight="700" fill="rgba(255,255,255,0.92)">' + label + '</text>' +
+      '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  /* ------------------------------------------------------------------ *
    * Rendering — shared card bits
    * ------------------------------------------------------------------ */
 
-  function thumbHtml(card, cls) {
-    var thumb = cardThumb(card);
+  // Emit an <img> with the standard onerror->monogram fallback span.
+  function imgWithFallback(src, cls, alt, fallbackLabel) {
+    return '<img class="' + (cls || 'td-thumb') + '" src="' + esc(src) +
+      '" alt="' + esc(alt) + '" loading="lazy" ' +
+      'onerror="this.style.display=&#39;none&#39;;this.nextSibling&amp;&amp;(this.nextSibling.style.display=&#39;flex&#39;);">' +
+      '<span class="' + (cls || 'td-thumb') + ' td-thumb-fallback" style="display:none">' +
+      esc(initials(fallbackLabel)) + '</span>';
+  }
+
+  function thumbHtml(card, cls, index) {
     var label = cardLabel(card);
-    if (thumb) {
-      return '<img class="' + (cls || 'td-thumb') + '" src="' + esc(thumb) +
-        '" alt="' + esc(label) + '" loading="lazy" ' +
-        'onerror="this.style.display=&#39;none&#39;;this.nextSibling&amp;&amp;(this.nextSibling.style.display=&#39;flex&#39;);">' +
-        '<span class="' + (cls || 'td-thumb') + ' td-thumb-fallback" style="display:none">' +
-        esc(initials(label)) + '</span>';
+    // (1) Explicit card thumbnail wins (preserves the sample round).
+    var thumb = cardThumb(card);
+    if (thumb) return imgWithFallback(thumb, cls, label, label);
+
+    // (2..4) Resolve member signals against the active round's signal index.
+    var members = resolveMembers(card, index);
+    if (members.length) {
+      // (2) First member with a real thumbnail URL.
+      for (var i = 0; i < members.length; i++) {
+        var t = sigThumbUrl(members[i]);
+        if (t) return imgWithFallback(t, cls, label, label);
+      }
+      // (3) Deterministic inline-SVG placeholder from the first member's theme.
+      var seed = sigTheme(members[0]) || label;
+      return imgWithFallback(placeholderSvg(seed), cls, label, label);
     }
+
+    // (4) No resolvable members -> letter monogram (the only remaining path).
     return '<span class="' + (cls || 'td-thumb') + ' td-thumb-fallback">' +
       esc(initials(label)) + '</span>';
   }
@@ -390,26 +572,34 @@
     return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
   }
 
-  function sourcesHtml(card) {
+  function sourcesHtml(card, index) {
+    // (1) Explicit sources map/array on the card wins (preserves the sample).
     var sources = cardSources(card);
-    var signals = cardSignals(card);
-    if (!sources.length && signals.length) {
-      // Fall back to labeled link chips from raw signals.
-      return signals.slice(0, 4).map(function (sig) {
-        var label, url;
-        if (typeof sig === 'string') { label = sig; url = ''; }
-        else {
-          label = firstOf(sig, 'theme', 'label', 'title', 'name') || 'signal';
-          url = firstOf(sig, 'url', 'source', 'href') || '';
-        }
-        if (url) {
-          return '<a class="td-chip" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-            esc(label) + '</a>';
-        }
-        return '<span class="td-chip">' + esc(label) + '</span>';
+    if (sources.length) {
+      return sources.map(function (s) {
+        return '<span class="td-chip">' + esc(s.label) +
+          (s.count > 1 ? ' <b>' + s.count + '</b>' : '') + '</span>';
       }).join('');
     }
-    return sources.map(function (s) {
+
+    // (2) Resolve member signalIds against the active round's signals and
+    // render a live platform breakdown. A string id that does not resolve to a
+    // member signal is skipped silently — never rendered verbatim.
+    var members = resolveMembers(card, index);
+    if (!members.length) return '';
+
+    var counts = {};
+    members.forEach(function (sig) {
+      var p = sigPlatform(sig);
+      counts[p] = (counts[p] || 0) + 1;
+    });
+    var rows = Object.keys(counts).map(function (p) {
+      return { label: p, count: counts[p] };
+    }).sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label).localeCompare(String(b.label));
+    });
+    return rows.map(function (s) {
       return '<span class="td-chip">' + esc(s.label) +
         (s.count > 1 ? ' <b>' + s.count + '</b>' : '') + '</span>';
     }).join('');
@@ -418,6 +608,31 @@
   /* ------------------------------------------------------------------ *
    * Rendering — Dashboard view
    * ------------------------------------------------------------------ */
+
+  // Admin governance strip: Close/reopen voting + dept suppression threshold.
+  // Inert (read-only note) for the bundled sample round.
+  function adminStripHtml(settings, isSample) {
+    if (isSample) {
+      return '<p class="td-muted td-small">Example data — round controls are ' +
+        'disabled. Start your own round to close voting or change the ' +
+        'suppression threshold.</p>';
+    }
+    var closed = !!settings.roundClosed;
+    var threshold = numberOr(settings.deptSuppressionThreshold, 2);
+    var html = '<div class="td-admin" role="group" aria-label="Round controls">';
+    html += '<div class="td-admin-cluster">';
+    html += '<button type="button" class="td-btn" id="td-toggle-closed" aria-pressed="' +
+      (closed ? 'true' : 'false') + '">' +
+      (closed ? 'Reopen voting' : 'Close voting') + '</button>';
+    html += '<span class="td-admin-status ' + (closed ? 'closed' : 'open') + '">' +
+      (closed ? 'Voting closed' : 'Voting open') + '</span>';
+    html += '</div>';
+    html += '<label class="td-admin-field">Suppress departments under ' +
+      '<input type="number" id="td-dept-threshold" min="0" max="99" step="1" ' +
+      'inputmode="numeric" value="' + threshold + '"> voters</label>';
+    html += '</div>';
+    return html;
+  }
 
   function resolveMount(container) {
     if (container && container.nodeType === 1) return container;
@@ -439,7 +654,6 @@
     if (!round || !(round.cards && round.cards.length)) {
       mount.innerHTML =
         '<section class="td-dashboard td-empty">' +
-        '<h2>Consensus dashboard</h2>' +
         '<p class="td-muted">No trend cards yet. Add signals, group them into ' +
         'trend cards, and collect votes to populate the dashboard.</p>' +
         '</section>';
@@ -450,20 +664,24 @@
     var deptData = computeDepartments(round);
     var t = totals(round);
     var settings = getSettings(round);
-    var sampleBadge = isSampleRound(round)
+    var index = buildSignalIndex(round);
+    var isSample = isSampleRound(round);
+    var sampleBadge = isSample
       ? '<span class="td-badge td-badge-sample">Example data</span>' : '';
 
     var html = '';
     html += '<section class="td-dashboard">';
     html += '<header class="td-dash-head">';
-    html += '<div><h2>Consensus dashboard ' + sampleBadge + '</h2>';
-    html += '<p class="td-muted">' + t.cards + ' trend cards · ' + t.signals +
+    html += '<div><p class="td-muted">' + t.cards + ' trend cards · ' + t.signals +
       ' signals · ' + t.votes + ' votes' +
-      (settings.roundClosed ? ' · <strong>round closed</strong>' : '') + '</p></div>';
+      (settings.roundClosed ? ' · <strong>round closed</strong>' : '') +
+      (sampleBadge ? ' ' + sampleBadge : '') + '</p></div>';
     html += '<div class="td-dash-actions">';
-    html += '<button type="button" class="td-btn td-btn-primary" id="td-export-brief">Export Trend Brief</button>';
-    html += '<button type="button" class="td-btn" id="td-export-pdf">Download PDF</button>';
+    html += '<button type="button" class="td-btn td-btn-primary" id="td-export-brief">Print / Save as PDF</button>';
+    html += '<button type="button" class="td-btn" id="td-export-pdf" title="Generates a lightweight text-only PDF via jsPDF — no thumbnails, win-rate bars, or imagery. For the designed layout, use Print / Save as PDF.">Plain-text PDF (no images)</button>';
     html += '</div></header>';
+
+    html += adminStripHtml(settings, isSample);
 
     if (t.votes === 0) {
       html += '<p class="td-notice">No votes recorded yet — the leaderboard below ' +
@@ -471,14 +689,27 @@
     }
 
     /* ---- Leaderboard ---- */
+    // Medal coloring is withheld for low-confidence rounds (total votes below
+    // LOW_CONFIDENCE_VOTES) or when the top win-rates are tied — both cases
+    // where a gold/silver/bronze podium would imply precision the sample lacks.
+    var medalsAllowed = (t.votes >= LOW_CONFIDENCE_VOTES);
+    var topTied = leaderboard.length >= 1 && (
+      (leaderboard[1] && leaderboard[1].winRate === leaderboard[0].winRate) ||
+      (leaderboard[2] && leaderboard[2].winRate === leaderboard[0].winRate)
+    );
+    medalsAllowed = medalsAllowed && !topTied;
+
     html += '<h3 class="td-section-title">Win-rate leaderboard</h3>';
     html += '<ol class="td-leaderboard">';
     leaderboard.forEach(function (row) {
       var card = row.card;
       var score = cardScore(card);
-      html += '<li class="td-lb-row">';
+      var classes = ['td-lb-row'];
+      if (medalsAllowed && row.rank <= 3) classes.push('td-lb-medal-' + row.rank);
+      if (row.appearances === 1) classes.push('td-lb-lown');
+      html += '<li class="' + classes.join(' ') + '">';
       html += '<span class="td-rank">' + row.rank + '</span>';
-      html += thumbHtml(card, 'td-thumb');
+      html += thumbHtml(card, 'td-thumb', index);
       html += '<div class="td-lb-body">';
       html += '<div class="td-lb-head"><span class="td-lb-label">' +
         esc(cardLabel(card)) + '</span>';
@@ -487,7 +718,9 @@
         pct(row.winRate) + '%"></span></div>';
       html += '<div class="td-lb-meta">' +
         '<span title="Head-to-head wins">' + row.wins + ' wins</span>' +
-        '<span title="Times shown in a pair">' + row.appearances + ' appearances</span>' +
+        (row.appearances === 1
+          ? '<span class="td-lb-onceflag" title="Times shown in a pair">only 1 appearance</span>'
+          : '<span title="Times shown in a pair">' + row.appearances + ' appearances</span>') +
         (score !== null && isFinite(score) ? '<span title="Composite score">score ' +
           (Math.round(score * 10) / 10) + '</span>' : '') +
         '</div>';
@@ -495,7 +728,7 @@
       if (rationale) {
         html += '<p class="td-rationale">' + esc(rationale) + '</p>';
       }
-      var chips = sourcesHtml(card);
+      var chips = sourcesHtml(card, index);
       if (chips) html += '<div class="td-chips">' + chips + '</div>';
       html += '</div></li>';
     });
@@ -506,9 +739,7 @@
       '<span class="td-muted td-small">(small departments under ' +
       deptData.threshold + ' voters are suppressed)</span></h3>';
 
-    if (!deptData.departments.length && !deptData.suppressed.length) {
-      html += '<p class="td-muted">No department data yet.</p>';
-    } else {
+    if (deptData.departments.length) {
       html += '<div class="td-dept-grid">';
       deptData.departments.forEach(function (d) {
         html += '<div class="td-dept-card">';
@@ -530,6 +761,22 @@
             return esc(d.dept) + ' (' + d.voters + ')';
           }).join(', ') + '.</p>';
       }
+    } else {
+      // No visible departments: explain the unlock threshold in plain language
+      // rather than rendering an empty grid or 'No department data yet.'.
+      var tail;
+      if (deptData.suppressed.length) {
+        var closest = deptData.suppressed[0];
+        deptData.suppressed.forEach(function (d) {
+          if (d.voters > closest.voters) closest = d;
+        });
+        tail = 'So far the closest is ' + esc(closest.dept) + ' with ' +
+          closest.voters + (closest.voters === 1 ? ' voter' : ' voters') + '.';
+      } else {
+        tail = 'Right now all votes are anonymous (no team selected).';
+      }
+      html += '<p class="td-muted">Department breakdown unlocks once ' +
+        deptData.threshold + '+ people from the same team vote. ' + tail + '</p>';
     }
 
     html += '</section>';
@@ -543,6 +790,37 @@
     if (exportBtn) exportBtn.addEventListener('click', function () { exportBrief(); });
     var pdfBtn = mount.querySelector('#td-export-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', function () { exportPDF(); });
+
+    // --- Admin governance controls (live rounds only) ---
+    var toggleBtn = mount.querySelector('#td-toggle-closed');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        var s = getStore();
+        if (!s || typeof s.setRoundClosed !== 'function') return;
+        var current = getSettings(getRound()).roundClosed;
+        try { s.setRoundClosed(null, !current); } catch (e) { return; }
+        render(mount);
+      });
+    }
+
+    var threshInput = mount.querySelector('#td-dept-threshold');
+    if (threshInput) {
+      threshInput.addEventListener('change', function () {
+        var s = getStore();
+        if (!s || typeof s.setDeptThreshold !== 'function') return;
+        var raw = threshInput.value;
+        var n = parseInt(raw, 10);
+        if (raw === '' || isNaN(n)) {
+          // Restore the field to the stored value; do not write a bad value.
+          threshInput.value = numberOr(getSettings(getRound()).deptSuppressionThreshold, 2);
+          return;
+        }
+        if (n < 0) n = 0;
+        if (n > 99) n = 99;
+        try { s.setDeptThreshold(null, n); } catch (e) { return; }
+        render(mount);
+      });
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -555,8 +833,9 @@
     var deptData = computeDepartments(round);
     var t = totals(round);
     var settings = getSettings(round);
+    var index = buildSignalIndex(round);
     var roundName = firstOf(round, 'name', 'title', 'label') || 'Studio Trend Round';
-    var dateStr = firstOf(round, 'date', 'createdAt', 'created') || '';
+    var dateStr = formatBriefDate(firstOf(round, 'date', 'createdAt', 'created'));
     var winners = leaderboard.slice(0, 5);
 
     var html = '<div class="td-brief" id="td-brief">';
@@ -573,13 +852,20 @@
       '</div>';
     html += '</header>';
 
+    if (t.votes < LOW_CONFIDENCE_VOTES) {
+      var voteWord = t.votes === 1 ? 'vote' : 'votes';
+      html += '<div class="brief-lowconf" role="note"><strong>Low-confidence ' +
+        'draft.</strong> This brief is based on ' + t.votes + ' ' + voteWord +
+        '. Treat the ranking as directional until more of the studio has voted.</div>';
+    }
+
     html += '<h2 class="brief-h2">Top trends by consensus</h2>';
     html += '<div class="brief-winners">';
     winners.forEach(function (row) {
       var card = row.card;
       html += '<div class="brief-winner">';
       html += '<div class="brief-winner-rank">' + row.rank + '</div>';
-      html += thumbHtml(card, 'brief-thumb');
+      html += thumbHtml(card, 'brief-thumb', index);
       html += '<div class="brief-winner-body">';
       html += '<div class="brief-winner-head"><span class="brief-winner-label">' +
         esc(cardLabel(card)) + '</span><span class="brief-winner-rate">' +
@@ -589,6 +875,8 @@
         row.appearances + ' appearances</div>';
       var rationale = cardRationale(card);
       if (rationale) html += '<p class="brief-rationale">' + esc(rationale) + '</p>';
+      var chips = sourcesHtml(card, index);
+      if (chips) html += '<div class="td-chips">' + chips + '</div>';
       html += '</div></div>';
     });
     html += '</div>';
@@ -627,9 +915,10 @@
       });
       html += '</div>';
     } else {
-      html += '<p class="brief-muted">No departments above the suppression threshold.</p>';
+      html += '<p class="brief-muted">Department breakdown unlocks once ' +
+        deptData.threshold + '+ people from the same team vote.</p>';
     }
-    if (deptData.suppressed.length) {
+    if (deptData.suppressed.length && deptData.departments.length) {
       html += '<p class="brief-muted">Suppressed (under ' + deptData.threshold +
         ' voters): ' + deptData.suppressed.map(function (d) {
           return esc(d.dept);
@@ -660,14 +949,16 @@
     var html = '<section class="td-brief-view">';
     html += '<div class="td-brief-toolbar td-no-print">';
     html += '<button type="button" class="td-btn td-btn-primary" id="td-brief-print">Print / Save as PDF</button>';
-    html += '<button type="button" class="td-btn" id="td-brief-pdf">Download PDF (jsPDF)</button>';
+    html += '<button type="button" class="td-btn" id="td-brief-pdf" title="Generates a lightweight text-only PDF via jsPDF — no thumbnails, win-rate bars, or imagery. For the designed layout, use Print / Save as PDF.">Plain-text PDF (no images)</button>';
     html += '</div>';
     html += buildBriefHtml(round);
     html += '</section>';
     mount.innerHTML = html;
 
     var printBtn = mount.querySelector('#td-brief-print');
-    if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+    if (printBtn) printBtn.addEventListener('click', function () {
+      exportBrief();
+    });
     var pdfBtn = mount.querySelector('#td-brief-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', function () { exportPDF(); });
   }
@@ -696,7 +987,10 @@
     document.body.appendChild(root);
 
     // Defer to next frame so images/layout settle before printing.
-    var fire = function () { window.print(); };
+    var fire = function () {
+      document.body.classList.add('is-printing');
+      window.print();
+    };
     if (global.requestAnimationFrame) {
       global.requestAnimationFrame(function () {
         global.requestAnimationFrame(fire);
@@ -794,6 +1088,7 @@
 
   // Clean up the injected print root after printing so it never shows on screen.
   global.addEventListener('afterprint', function () {
+    document.body.classList.remove('is-printing');
     var root = document.getElementById('td-print-root');
     if (root && root.parentNode) root.parentNode.removeChild(root);
   });

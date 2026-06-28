@@ -85,8 +85,28 @@
 
   function newRound(name) {
     var s = store();
+
+    // Capture the currently-active round BEFORE creating the new one so we can
+    // truly replace it (the confirm copy promises a replacement). Only the
+    // roundId-first store.js path accumulates orphaned rounds; the payload-first
+    // / store-less fallback below keeps its single-round behavior untouched.
+    var prevId = (s && typeof s.getActiveRoundId === 'function')
+      ? s.getActiveRoundId() : null;
+    var prevRound = (prevId && typeof s.getRound === 'function')
+      ? s.getRound(prevId) : null;
+
     var created = call(s, ['newRound', 'createRound', 'resetRound', 'startRound'], [name]);
-    if (created && typeof created === 'object') return created;
+    if (created && typeof created === 'object') {
+      // Delete the previously-active round only when it is a real user round
+      // (never the bundled sample, never the just-created round). The sample's
+      // dedicated clear affordance lives in the sample banner.
+      if (prevId && created.id !== prevId && prevRound &&
+          !prevRound.isSample && !prevRound.sample &&
+          typeof s.deleteRound === 'function') {
+        try { s.deleteRound(prevId); } catch (e) { /* leave orphan rather than crash */ }
+      }
+      return created;
+    }
     // Fallback: build an empty round and persist it.
     var round = {
       id: 'round-' + nowStamp(),
@@ -213,7 +233,9 @@
     return {
       id: input.id ? String(input.id) : genId(),
       theme: theme,
+      sourceUrl: source,
       source: source,
+      thumbnailUrl: thumb,
       thumbnail: thumb,
       platform: platformFromUrl(source),
       createdAt: new Date().toISOString()
@@ -338,8 +360,8 @@
             '</p>' +
           '</div>' +
           '<div class="view-header-actions">' +
-            '<button type="button" class="btn btn-secondary" id="btn-new-round">＋ New Round</button>' +
-            '<button type="button" class="btn btn-ghost" id="btn-load-sample">Reload sample</button>' +
+            '<button type="button" class="btn btn--secondary" id="btn-new-round">＋ New Round</button>' +
+            '<button type="button" class="btn btn--ghost" id="btn-load-sample">Reload sample</button>' +
           '</div>' +
         '</header>' +
 
@@ -363,7 +385,7 @@
                 '<input type="url" name="thumbnail" id="f-thumb" placeholder="https://.../image.jpg" />' +
               '</label>' +
               '<div class="form-actions">' +
-                '<button type="submit" class="btn btn-primary">Add signal</button>' +
+                '<button type="submit" class="btn btn--primary">Add signal</button>' +
               '</div>' +
             '</form>' +
           '</div>' +
@@ -381,7 +403,7 @@
               '</span>' +
             '</label>' +
             '<div class="import-tools">' +
-              '<button type="button" class="btn btn-ghost btn-sm" id="btn-sample-csv">Download CSV template</button>' +
+              '<button type="button" class="btn btn--ghost btn--sm" id="btn-sample-csv">Download CSV template</button>' +
             '</div>' +
             '<div id="csv-report" class="import-report" aria-live="polite"></div>' +
           '</div>' +
@@ -391,7 +413,7 @@
         '<div class="panel panel-signal-list">' +
           '<div class="panel-list-head">' +
             '<h2>Saved signals</h2>' +
-            (signals.length ? '<button type="button" class="btn btn-danger btn-sm" id="btn-clear-signals">Clear all</button>' : '') +
+            (signals.length ? '<button type="button" class="btn btn--danger btn--sm" id="btn-clear-signals">Clear all</button>' : '') +
           '</div>' +
           renderSignalList(signals) +
         '</div>' +
@@ -730,12 +752,15 @@
     var skipped = 0;
     var seen = Object.create(null);
     var existing = readSignals();
-    existing.forEach(function (s) { seen[dedupeKey(s.theme, s.source)] = true; });
+    // Key existing signals through the same accessors used for incoming rows so
+    // store-normalized signals (which carry sourceUrl, not source) dedupe
+    // like-for-like and a re-import after reload does not double every row.
+    existing.forEach(function (s) { seen[dedupeKey(sigTheme(s), sigSource(s))] = true; });
 
     for (var i = 0; i < rows.length; i++) {
       var signal = makeSignal(rows[i]);
       if (!signal) { skipped++; continue; }
-      var key = dedupeKey(signal.theme, signal.source);
+      var key = dedupeKey(sigTheme(signal), sigSource(signal));
       if (seen[key]) { skipped++; continue; }
       seen[key] = true;
       accepted.push(signal);
