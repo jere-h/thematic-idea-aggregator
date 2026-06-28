@@ -25,6 +25,10 @@
 (function (global) {
   'use strict';
 
+  // Below ~12 recorded votes the head-to-head spread is statistically trivial
+  // for a studio round (~one voter completing one MIN_PAIRS=6 session twice).
+  var LOW_CONFIDENCE_VOTES = 12;
+
   /* ------------------------------------------------------------------ *
    * Store / round access (defensive across possible store shapes)
    * ------------------------------------------------------------------ */
@@ -351,6 +355,20 @@
     };
   }
 
+  // Turn an ISO/date value into e.g. "June 22, 2026"; '' for missing/invalid.
+  function formatBriefDate(value) {
+    if (!value) return '';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    try {
+      return d.toLocaleDateString(undefined, {
+        year: 'numeric', month: 'long', day: 'numeric'
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
   function isSampleRound(round) {
     if (!round) return false;
     return !!(round.isSample || round.sample || round.demo ||
@@ -556,7 +574,7 @@
     var t = totals(round);
     var settings = getSettings(round);
     var roundName = firstOf(round, 'name', 'title', 'label') || 'Studio Trend Round';
-    var dateStr = firstOf(round, 'date', 'createdAt', 'created') || '';
+    var dateStr = formatBriefDate(firstOf(round, 'date', 'createdAt', 'created'));
     var winners = leaderboard.slice(0, 5);
 
     var html = '<div class="td-brief" id="td-brief">';
@@ -572,6 +590,13 @@
       (isSampleRound(round) ? '<br><em>Example data</em>' : '') +
       '</div>';
     html += '</header>';
+
+    if (t.votes < LOW_CONFIDENCE_VOTES) {
+      var voteWord = t.votes === 1 ? 'vote' : 'votes';
+      html += '<div class="brief-lowconf" role="note"><strong>Low-confidence ' +
+        'draft.</strong> This brief is based on ' + t.votes + ' ' + voteWord +
+        '. Treat the ranking as directional until more of the studio has voted.</div>';
+    }
 
     html += '<h2 class="brief-h2">Top trends by consensus</h2>';
     html += '<div class="brief-winners">';
@@ -667,7 +692,10 @@
     mount.innerHTML = html;
 
     var printBtn = mount.querySelector('#td-brief-print');
-    if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+    if (printBtn) printBtn.addEventListener('click', function () {
+      document.body.classList.add('is-printing');
+      window.print();
+    });
     var pdfBtn = mount.querySelector('#td-brief-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', function () { exportPDF(); });
   }
@@ -696,7 +724,10 @@
     document.body.appendChild(root);
 
     // Defer to next frame so images/layout settle before printing.
-    var fire = function () { window.print(); };
+    var fire = function () {
+      document.body.classList.add('is-printing');
+      window.print();
+    };
     if (global.requestAnimationFrame) {
       global.requestAnimationFrame(function () {
         global.requestAnimationFrame(fire);
@@ -794,6 +825,7 @@
 
   // Clean up the injected print root after printing so it never shows on screen.
   global.addEventListener('afterprint', function () {
+    document.body.classList.remove('is-printing');
     var root = document.getElementById('td-print-root');
     if (root && root.parentNode) root.parentNode.removeChild(root);
   });

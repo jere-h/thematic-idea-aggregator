@@ -338,8 +338,8 @@
             '</p>' +
           '</div>' +
           '<div class="view-header-actions">' +
-            '<button type="button" class="btn btn-secondary" id="btn-new-round">＋ New Round</button>' +
-            '<button type="button" class="btn btn-ghost" id="btn-load-sample">Reload sample</button>' +
+            '<button type="button" class="btn btn--secondary" id="btn-new-round">＋ New Round</button>' +
+            '<button type="button" class="btn btn--ghost" id="btn-load-sample">Reload sample</button>' +
           '</div>' +
         '</header>' +
 
@@ -363,7 +363,7 @@
                 '<input type="url" name="thumbnail" id="f-thumb" placeholder="https://.../image.jpg" />' +
               '</label>' +
               '<div class="form-actions">' +
-                '<button type="submit" class="btn btn-primary">Add signal</button>' +
+                '<button type="submit" class="btn btn--primary">Add signal</button>' +
               '</div>' +
             '</form>' +
           '</div>' +
@@ -381,7 +381,7 @@
               '</span>' +
             '</label>' +
             '<div class="import-tools">' +
-              '<button type="button" class="btn btn-ghost btn-sm" id="btn-sample-csv">Download CSV template</button>' +
+              '<button type="button" class="btn btn--ghost btn--sm" id="btn-sample-csv">Download CSV template</button>' +
             '</div>' +
             '<div id="csv-report" class="import-report" aria-live="polite"></div>' +
           '</div>' +
@@ -391,7 +391,7 @@
         '<div class="panel panel-signal-list">' +
           '<div class="panel-list-head">' +
             '<h2>Saved signals</h2>' +
-            (signals.length ? '<button type="button" class="btn btn-danger btn-sm" id="btn-clear-signals">Clear all</button>' : '') +
+            (signals.length ? '<button type="button" class="btn btn--danger btn--sm" id="btn-clear-signals">Clear all</button>' : '') +
           '</div>' +
           renderSignalList(signals) +
         '</div>' +

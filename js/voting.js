@@ -92,6 +92,8 @@
   }
 
   function getRound() {
+    // Resolve the active round ONLY through the store — no divergent
+    // localStorage fallback that could mask a failed write.
     var s = getStore();
     if (s) {
       try {
@@ -99,52 +101,21 @@
         if (typeof s.getCurrentRound === 'function') return s.getCurrentRound();
         if (typeof s.getRound === 'function') return s.getRound();
         if (s.round) return s.round;
-        if (typeof s.load === 'function') return s.load();
       } catch (e) { /* fall through */ }
     }
-    // Last-resort fallback: try a known localStorage key.
-    try {
-      var raw = localStorage.getItem('trenddeck.round') ||
-                localStorage.getItem('trenddeck.state');
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        return parsed && parsed.round ? parsed.round : parsed;
-      }
-    } catch (e2) { /* ignore */ }
     return null;
   }
 
-  function saveRound(round) {
-    var s = getStore();
-    if (s) {
-      try {
-        if (typeof s.saveRound === 'function') return s.saveRound(round);
-        if (typeof s.updateRound === 'function') return s.updateRound(round);
-        if (typeof s.save === 'function') return s.save(round);
-      } catch (e) { /* fall through */ }
-    }
-    try {
-      localStorage.setItem('trenddeck.round', JSON.stringify(round));
-    } catch (e2) { /* ignore quota */ }
-  }
-
+  // store.addVote(roundId, vote) is roundId-first; pass null to mean
+  // "active round". Returns the saved vote on success, or null on rejection
+  // (closed round, invalid/equal card ids, or no active round). No
+  // localStorage fallback — a failed write must surface, never be masked.
   function persistVote(vote) {
     var s = getStore();
-    if (s) {
-      try {
-        if (typeof s.addVote === 'function') return s.addVote(vote);
-        if (typeof s.recordVote === 'function') return s.recordVote(vote);
-        if (typeof s.castVote === 'function') return s.castVote(vote);
-      } catch (e) { /* fall through */ }
+    if (s && typeof s.addVote === 'function') {
+      return s.addVote(null, vote);
     }
-    // Fallback: append to the round and persist the whole thing.
-    var round = getRound();
-    if (round) {
-      if (!Array.isArray(round.votes)) round.votes = [];
-      round.votes.push(vote);
-      saveRound(round);
-    }
-    return vote;
+    return null;
   }
 
   function getRoundId(round) {
@@ -594,8 +565,10 @@
     Array.prototype.forEach.call(buttons, function (btn) {
       btn.addEventListener('click', function () {
         var winnerId = btn.getAttribute('data-card-id');
-        recordPick(round, session, winnerId);
-        render();
+        btn.classList.add('is-picked');
+        // recordPick re-renders itself on rejection (closed view or inline
+        // banner); only re-render here on a successful, advanced vote.
+        if (recordPick(round, session, winnerId)) render();
       });
     });
 
@@ -624,18 +597,24 @@
     var pair = session.pairs[session.index];
     var loserId = pair[0] === winnerId ? pair[1] : pair[0];
 
+    // Speak the store's real normalizeVote contract: winnerCardId/loserCardId,
+    // department, sessionId. Do NOT send winnerId/loserId/roundId/ts/id — the
+    // store ignores them and stamps its own id/createdAt/pairKey.
     var vote = {
-      id: randomId('vote'),
-      roundId: getRoundId(round),
-      sessionId: session.sessionId,
-      winnerId: winnerId,
-      loserId: loserId,
+      winnerCardId: winnerId,
+      loserCardId: loserId,
       department: session.department || ANON_DEPT,
-      ts: Date.now()
+      sessionId: session.sessionId
     };
 
-    persistVote(vote);
+    var saved = persistVote(vote);
+    if (!saved) {
+      handleVoteRejected(round, session);
+      return false;
+    }
 
+    // Only advance the session after a truthy persist so the streak counter
+    // and the "votes are in" screen can never report a discarded vote.
     session.index += 1;
     session.voted += 1;
     session.streak = (session.streak || 0) + 1;
@@ -644,6 +623,33 @@
     }
     if (session.index >= session.pairs.length) session.finished = true;
     saveSession(session);
+    return true;
+  }
+
+  // A vote write failed. If the round is now closed, paint the read-only
+  // closed view. Otherwise surface a non-blocking error and do NOT advance.
+  function handleVoteRejected(round, session) {
+    if (isRoundClosed(round)) {
+      clearSession();
+      render();
+      return;
+    }
+    var msg = 'Could not save that vote. Your round may be closed or storage ' +
+      'is full — refresh and try again.';
+    if (window.TrendDeck && typeof window.TrendDeck.toast === 'function') {
+      window.TrendDeck.toast(msg);
+      return;
+    }
+    // Fallback: inject a single dismissible banner at the top of the matchup.
+    var el = resolveMount();
+    if (!el) return;
+    var arena = el.querySelector('.view--matchup') || el;
+    if (arena.querySelector('.banner-error')) return;
+    var banner = document.createElement('div');
+    banner.className = 'banner banner-error';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = '<span>' + escapeHtml(msg) + '</span>';
+    arena.insertBefore(banner, arena.firstChild);
   }
 
   // ---- View: done ------------------------------------------------
