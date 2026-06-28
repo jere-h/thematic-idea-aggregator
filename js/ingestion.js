@@ -63,16 +63,21 @@
 
   function getRound() {
     var s = store();
-    var round = call(s, ['getRound', 'getCurrentRound', 'currentRound', 'loadRound', 'getActiveRound']);
+    // Prefer the no-arg "active round" accessors. store.js's getRound(roundId)
+    // requires an id and returns null when called with none, so it must NOT be
+    // probed before getActiveRound or the seeded sample round is never read.
+    var round = call(s, ['getActiveRound', 'getCurrentRound', 'currentRound', 'loadRound']);
     if (round && typeof round === 'object') return round;
     return fallbackGetRound();
   }
 
   function saveRound(round) {
     var s = store();
-    var saved = call(s, ['saveRound', 'updateRound', 'putRound', 'setRound', 'persistRound', 'save'], [round]);
+    // store.js has no whole-round "save" (its mutators are field-scoped and
+    // commit internally); these names are only here for an alternate store
+    // implementation. When none match, fall back to local persistence.
+    var saved = call(s, ['saveRound', 'putRound', 'setRound', 'persistRound', 'save'], [round]);
     if (saved === undefined) {
-      // store had no recognizable save method — use fallback.
       fallbackSaveRound(round);
     }
     return round;
@@ -226,21 +231,51 @@
   }
 
   function writeSignals(signals) {
+    var s = store();
+    // For store.js (roundId-first, field-scoped mutators) there is no whole-round
+    // setter, so reconcile the current signal set against the desired one by
+    // removing/adding through the store's own API (keeps cards/votes consistent).
+    if (isRoundIdFirstStore(s)) {
+      var keep = {};
+      (signals || []).forEach(function (sig) { if (sig && sig.id) keep[sig.id] = true; });
+      var current = readSignals().slice();
+      var have = {};
+      current.forEach(function (sig) {
+        have[sig.id] = true;
+        if (!keep[sig.id] && typeof s.removeSignal === 'function') s.removeSignal(null, sig.id);
+      });
+      var toAdd = (signals || []).filter(function (sig) { return !sig.id || !have[sig.id]; });
+      if (toAdd.length) addSignals(toAdd);
+      return;
+    }
     var round = getRound();
     if (!round) return;
     round.signals = signals;
     saveRound(round);
   }
 
+  // store.js uses roundId-first signatures (addSignals(roundId, signals),
+  // addSignal(roundId, signal), removeSignal(roundId, signalId)) and operates on
+  // the active round when the id is falsy. Detect that store via getActiveRoundId
+  // so we pass the id slot explicitly instead of putting the payload there.
+  function isRoundIdFirstStore(s) {
+    return !!(s && typeof s.getActiveRoundId === 'function');
+  }
+
   function addSignals(newOnes) {
     if (!newOnes || !newOnes.length) return 0;
     var s = store();
-    // Prefer a dedicated bulk/single add on the store when present, so it can
-    // keep any derived state (e.g. dirtying cards) consistent.
+    if (isRoundIdFirstStore(s)) {
+      if (typeof s.addSignals === 'function') { s.addSignals(null, newOnes); return newOnes.length; }
+      if (typeof s.addSignal === 'function') {
+        for (var k = 0; k < newOnes.length; k++) s.addSignal(null, newOnes[k]);
+        return newOnes.length;
+      }
+    }
+    // Alternate store APIs (payload-first) / probing fallbacks.
     var bulk = call(s, ['addSignals', 'importSignals', 'appendSignals'], [newOnes]);
     if (bulk !== undefined) return newOnes.length;
-    var single = s && (typeof s.addSignal === 'function');
-    if (single) {
+    if (s && typeof s.addSignal === 'function') {
       for (var i = 0; i < newOnes.length; i++) s.addSignal(newOnes[i]);
       return newOnes.length;
     }
@@ -253,6 +288,10 @@
 
   function removeSignal(id) {
     var s = store();
+    if (isRoundIdFirstStore(s) && typeof s.removeSignal === 'function') {
+      s.removeSignal(null, id);
+      return;
+    }
     var removed = call(s, ['removeSignal', 'deleteSignal'], [id]);
     if (removed !== undefined) return;
     var existing = readSignals().filter(function (sig) { return sig.id !== id; });
@@ -278,7 +317,9 @@
   }
 
   function render(container) {
-    mountEl = container || mountEl || document.getElementById('view') || document.getElementById('app');
+    mountEl = container || mountEl ||
+      document.getElementById('ingestion-root') ||
+      document.getElementById('view') || document.getElementById('app');
     if (!mountEl) return;
     var round = getRound();
     var signals = readSignals();
@@ -288,7 +329,9 @@
       '<section class="view view-signals" id="signals-view">' +
         '<header class="view-header">' +
           '<div class="view-header-main">' +
-            '<h1>Signals</h1>' +
+            // The static #view-round head in index.html already renders the
+            // "Signals" title + lede; we only emit the round-meta/count sub-line
+            // here so the page shows a single heading.
             '<p class="view-sub">Round: <strong>' + escapeHtml(roundName) + '</strong> · ' +
               '<span class="count-pill">' + signals.length + ' signal' + (signals.length === 1 ? '' : 's') + '</span>' +
               (isSampleRound() ? ' <span class="badge badge-sample">Example data</span>' : '') +
@@ -364,19 +407,17 @@
       return '<p class="empty-state">No signals yet. Add one above or import a CSV to get started.</p>';
     }
     var rows = signals.map(function (sig) {
-      var thumb = sig.thumbnail
-        ? '<img class="sig-thumb" src="' + escapeHtml(sig.thumbnail) + '" alt="" loading="lazy" onerror="this.classList.add(\'broken\')" />'
-        : '<span class="sig-thumb sig-thumb-empty" aria-hidden="true">▦</span>';
-      var link = sig.source
-        ? '<a class="sig-source" href="' + escapeHtml(sig.source) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(shortUrl(sig.source)) + '</a>'
+      var source = sigSource(sig);
+      var link = source
+        ? '<a class="sig-source" href="' + escapeHtml(source) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(shortUrl(source)) + '</a>'
         : '<span class="sig-source sig-source-empty">no source link</span>';
       return '' +
         '<li class="sig-row" data-id="' + escapeHtml(sig.id) + '">' +
-          thumb +
+          thumbHtml(sig) +
           '<div class="sig-meta">' +
-            '<span class="sig-theme">' + escapeHtml(sig.theme) + '</span>' +
+            '<span class="sig-theme">' + escapeHtml(sigTheme(sig)) + '</span>' +
             '<span class="sig-sub">' +
-              '<span class="sig-platform">' + escapeHtml(sig.platform || 'Other') + '</span>' +
+              '<span class="sig-platform">' + escapeHtml(sigPlatform(sig)) + '</span>' +
               ' · ' + link +
             '</span>' +
           '</div>' +
@@ -384,6 +425,94 @@
         '</li>';
     }).join('');
     return '<ul class="signal-list">' + rows + '</ul>';
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * Self-contained thumbnails
+   * ---------------------------------------------------------------------- *
+   * A trend-voting tool is inherently visual, but external thumbnail URLs
+   * break offline and on GitHub Pages. We generate a deterministic inline-SVG
+   * placeholder from the signal text (theme initials + a hue derived from the
+   * text) so every signal always has a self-contained visual. A real external
+   * thumbnail, when present, is shown as an <img> that falls back to this SVG
+   * on error.
+   */
+
+  // Stable 32-bit hash of a string (so the same theme always yields the same hue).
+  function hashStr(str) {
+    var h = 5381;
+    str = String(str || '');
+    for (var i = 0; i < str.length; i++) {
+      h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+  }
+
+  function initials(text) {
+    // Derive 1–2 initials from word-initial LETTERS/digits only, so leading
+    // quotes/punctuation (e.g. Chunky "claymorphism") never leak into the badge.
+    var words = String(text || '')
+      .split(/\s+/)
+      .map(function (w) { return w.replace(/^[^0-9a-z]+/i, ''); })
+      .filter(Boolean);
+    if (!words.length) return '?';
+    if (words.length === 1) {
+      var alnum = words[0].replace(/[^0-9a-z]/gi, '');
+      return (alnum.slice(0, 2) || '?').toUpperCase();
+    }
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+  }
+
+  // Build a data-URI SVG: a two-stop diagonal gradient (hue from the text) with
+  // the theme initials centered. Self-contained — no network needed.
+  function placeholderSvg(text) {
+    var h = hashStr(text);
+    var hue = h % 360;
+    var hue2 = (hue + 40) % 360;
+    var label = escapeHtml(initials(text));
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="' + label + '">' +
+        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0" stop-color="hsl(' + hue + ',62%,46%)"/>' +
+          '<stop offset="1" stop-color="hsl(' + hue2 + ',58%,32%)"/>' +
+        '</linearGradient></defs>' +
+        '<rect width="320" height="200" fill="url(#g)"/>' +
+        '<text x="160" y="112" text-anchor="middle" font-family="' +
+          '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif" ' +
+          'font-size="72" font-weight="700" fill="rgba(255,255,255,0.92)">' + label + '</text>' +
+      '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  // <img> markup for a signal thumbnail. Always self-contained: uses the inline
+  // SVG placeholder by default, and only an external URL when present — falling
+  // back to the SVG via onerror so Pages/offline never shows a broken image.
+  function thumbHtml(sig) {
+    var theme = sigTheme(sig);
+    var svg = placeholderSvg(theme);
+    var ext = sigThumb(sig);
+    var src = ext || svg;
+    var onerror = ext
+      ? ' onerror="this.onerror=null;this.src=\'' + escapeHtml(svg) + '\'"'
+      : '';
+    return '<img class="sig-thumb" src="' + escapeHtml(src) + '" alt="" loading="lazy"' + onerror + ' />';
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * Field accessors (store.js normalizes signals to theme/sourceUrl/
+   * thumbnailUrl/platform; older/in-form shapes may use source/thumbnail).
+   * ---------------------------------------------------------------------- */
+  function sigTheme(sig) {
+    return trim(sig && (sig.theme || sig.label || sig.title || sig.name));
+  }
+  function sigSource(sig) {
+    return trim(sig && (sig.sourceUrl || sig.source || sig.url || sig.link || sig.href));
+  }
+  function sigThumb(sig) {
+    return trim(sig && (sig.thumbnailUrl || sig.thumbnail || sig.image || sig.img));
+  }
+  function sigPlatform(sig) {
+    return trim(sig && sig.platform) || platformFromUrl(sigSource(sig)) || 'Other';
   }
 
   function shortUrl(url) {
@@ -666,6 +795,41 @@
     } catch (e) {
       setReport('Could not generate the template in this browser.', 'error');
     }
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * Router integration
+   * ---------------------------------------------------------------------- *
+   * index.html's hash router dispatches `trenddeck:render` with
+   * detail.route when a view becomes active. The Signals view lives in
+   * `#ingestion-root`; mount into it whenever the round/signals route is shown
+   * (and once on DOMContentLoaded so the first paint is populated).
+   */
+  function isSignalsRoute(route) {
+    var r = String(route || '').toLowerCase();
+    return r === 'round' || r === 'signals' || r === '' ;
+  }
+
+  function mountSignals() {
+    var root = document.getElementById('ingestion-root');
+    if (root) render(root);
+  }
+
+  document.addEventListener('trenddeck:render', function (ev) {
+    var detail = ev && ev.detail ? ev.detail : {};
+    if (isSignalsRoute(detail.route)) mountSignals();
+  });
+
+  function ingestionBoot() {
+    // Only paint if the signals view is the active route on first load.
+    var hash = (global.location && global.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+    if (isSignalsRoute(hash)) mountSignals();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ingestionBoot);
+  } else {
+    ingestionBoot();
   }
 
   /* ---------------------------------------------------------------------- *

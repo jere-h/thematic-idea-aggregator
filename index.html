@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="TrendDeck \u2014 run one studio trend-voting round entirely in the browser: import signals, group them into trend cards, vote head-to-head, and export a two-page Trend Brief. No backend." />
-  <title>TrendDeck \u2014 Studio Trend Voting Brief Builder</title>
+  <meta name="description" content="TrendDeck — run one studio trend-voting round entirely in the browser: import signals, group them into trend cards, vote head-to-head, and export a two-page Trend Brief. No backend." />
+  <title>TrendDeck — Studio Trend Voting Brief Builder</title>
 
   <!-- App styles -->
   <link rel="stylesheet" href="css/app.css" />
 
   <!-- Third-party libraries (CDN). PapaParse is required for CSV import;
-       jsPDF is optional \u2014 the app degrades to window.print() if it fails to load. -->
+       jsPDF is optional — the app degrades to window.print() if it fails to load. -->
   <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <!-- Application modules. Load order matters:
-       sample-data (bundled seed) \u2192 store (persistence/seeding) \u2192 feature modules \u2192 router boot.
+       sample-data (bundled seed) → store (persistence/seeding) → feature modules → router boot.
        `defer` preserves order and runs after the DOM is parsed. -->
   <script defer src="js/sample-data.js"></script>
   <script defer src="js/store.js"></script>
@@ -30,7 +30,7 @@
   <!-- ============================ APP CHROME ============================ -->
   <header class="app-header" data-print-hide>
     <div class="app-header__brand">
-      <span class="app-header__logo" aria-hidden="true">\u25C8</span>
+      <span class="app-header__logo" aria-hidden="true">◈</span>
       <div class="app-header__titles">
         <h1 class="app-header__title">TrendDeck</h1>
         <p class="app-header__subtitle">Studio Trend Voting Brief Builder</p>
@@ -38,7 +38,7 @@
     </div>
 
     <div class="app-header__round" id="round-meta" aria-live="polite">
-      <span class="round-pill" id="round-name-pill">Loading round\u2026</span>
+      <span class="round-pill" id="round-name-pill">Loading round…</span>
     </div>
 
     <nav class="app-nav" aria-label="Primary">
@@ -55,7 +55,7 @@
   <div class="sample-banner" id="sample-banner" data-print-hide hidden>
     <span class="sample-banner__badge">EXAMPLE DATA</span>
     <span class="sample-banner__text">
-      You\u2019re viewing a pre-loaded sample round (signals, trend cards &amp; votes) so you can see the whole flow.
+      You’re viewing a pre-loaded sample round (signals, trend cards &amp; votes) so you can see the whole flow.
     </span>
     <button type="button" class="btn btn--ghost btn--sm" id="sample-banner__clear">Clear &amp; start my own round</button>
   </div>
@@ -70,7 +70,7 @@
         <p class="view__lede">Collect candidate trend signals for this round. Paste them in one at a time or import a CSV.</p>
       </div>
       <div class="view__body" id="ingestion-root">
-        <p class="view__placeholder">Loading signals\u2026</p>
+        <p class="view__placeholder">Loading signals…</p>
       </div>
     </section>
 
@@ -81,7 +81,7 @@
         <p class="view__lede">Group signals into named trend cards, or paste a clustering JSON from your own Claude session.</p>
       </div>
       <div class="view__body" id="cards-root">
-        <p class="view__placeholder">Loading trend cards\u2026</p>
+        <p class="view__placeholder">Loading trend cards…</p>
       </div>
     </section>
 
@@ -89,10 +89,10 @@
     <section class="view" id="view-vote" data-view="vote" hidden>
       <div class="view__head">
         <h2 class="view__title">Head-to-Head Vote</h2>
-        <p class="view__lede">Anonymous voting \u2014 pick the stronger trend in each pair. 6\u201310 quick match-ups per session.</p>
+        <p class="view__lede">Anonymous voting — pick the stronger trend in each pair. 6–10 quick match-ups per session.</p>
       </div>
       <div class="view__body" id="voting-root">
-        <p class="view__placeholder">Loading ballot\u2026</p>
+        <p class="view__placeholder">Loading ballot…</p>
       </div>
     </section>
 
@@ -103,18 +103,18 @@
         <p class="view__lede">Win-rate leaderboard, by-department breakdown, and the export to a printable Trend Brief.</p>
       </div>
       <div class="view__body" id="dashboard-root">
-        <p class="view__placeholder">Loading results\u2026</p>
+        <p class="view__placeholder">Loading results…</p>
       </div>
     </section>
 
-    <!-- BRIEF view \u2014 the print-styled two-page deliverable (owned by js/dashboard.js) -->
+    <!-- BRIEF view — the print-styled two-page deliverable (owned by js/dashboard.js) -->
     <section class="view" id="view-brief" data-view="brief" hidden>
       <div class="view__head" data-print-hide>
         <h2 class="view__title">Trend Brief</h2>
         <p class="view__lede">A two-page summary ready to print or save as PDF.</p>
       </div>
       <div class="view__body brief-sheet" id="brief-root">
-        <p class="view__placeholder">Building brief\u2026</p>
+        <p class="view__placeholder">Building brief…</p>
       </div>
     </section>
 
@@ -130,7 +130,7 @@
       <button type="button" class="btn btn--ghost btn--sm" id="action-share-link">Copy share link</button>
     </div>
     <p class="app-footer__note">
-      TrendDeck runs entirely in your browser. All data lives in this device\u2019s localStorage \u2014 nothing is sent to a server.
+      TrendDeck runs entirely in your browser. All data lives in this device’s localStorage — nothing is sent to a server.
     </p>
   </footer>
 
@@ -156,12 +156,18 @@
       return ROUTES.indexOf(hash) !== -1 ? hash : DEFAULT_ROUTE;
     }
 
+    // store.js (a deferred module, evaluated before this script's boot runs)
+    // exposes the persistence layer as window.Store. Resolve defensively so the
+    // shell still works if a build renames the global.
+    function trendStore() {
+      return window.Store || window.TrendStore || window.store || null;
+    }
+
     function activeRound() {
-      // store.js (loaded with defer, before this inline script runs at DOMContentLoaded)
-      // exposes window.TrendStore. Guard in case it failed to load.
       try {
-        if (window.TrendStore && typeof window.TrendStore.getActiveRound === 'function') {
-          return window.TrendStore.getActiveRound();
+        var s = trendStore();
+        if (s && typeof s.getActiveRound === 'function') {
+          return s.getActiveRound();
         }
       } catch (err) {
         console.error('TrendDeck: could not read active round', err);
@@ -226,13 +232,32 @@
       }, ms || 2200);
     };
 
-    // ---- Footer / banner wiring (delegates to store.js where available) ----
+    // ---- Footer / banner wiring (delegates to store.js's real API) ----
+    function downloadJson(filename, json) {
+      try {
+        var blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
     function wireChrome() {
       var exportBtn = document.getElementById('action-export-round');
       if (exportBtn) {
         exportBtn.addEventListener('click', function () {
-          if (window.TrendStore && window.TrendStore.exportRoundFile) {
-            window.TrendStore.exportRoundFile();
+          var s = trendStore();
+          var json = s && s.exportRoundJSON ? s.exportRoundJSON(null, true) : '';
+          if (json && downloadJson('trenddeck-round.json', json)) {
+            window.TrendDeck.toast('Exported round file');
           } else {
             window.TrendDeck.toast('Export unavailable');
           }
@@ -243,15 +268,27 @@
       if (importInput) {
         importInput.addEventListener('change', function (evt) {
           var file = evt.target.files && evt.target.files[0];
-          if (!file) return;
-          if (window.TrendStore && window.TrendStore.importRoundFile) {
-            window.TrendStore.importRoundFile(file, function (ok, msg) {
-              window.TrendDeck.toast(msg || (ok ? 'Round imported' : 'Import failed'));
-              if (ok) window.TrendDeck.refresh();
-            });
-          } else {
+          if (!file) { importInput.value = ''; return; }
+          var s = trendStore();
+          if (!s || !s.importRound) {
             window.TrendDeck.toast('Import unavailable');
+            importInput.value = '';
+            return;
           }
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            var result;
+            try {
+              result = s.importRound(String(e.target.result || ''));
+            } catch (err) {
+              result = { ok: false, error: err && err.message };
+            }
+            var ok = result && result.ok;
+            window.TrendDeck.toast(ok ? 'Round imported' : ('Import failed' + (result && result.error ? ': ' + result.error : '')));
+            if (ok) window.TrendDeck.refresh();
+          };
+          reader.onerror = function () { window.TrendDeck.toast('Could not read the file'); };
+          reader.readAsText(file);
           importInput.value = '';
         });
       }
@@ -259,9 +296,8 @@
       var shareBtn = document.getElementById('action-share-link');
       if (shareBtn) {
         shareBtn.addEventListener('click', function () {
-          var link = (window.TrendStore && window.TrendStore.encodeShareLink)
-            ? window.TrendStore.encodeShareLink()
-            : window.location.href;
+          var s = trendStore();
+          var link = (s && s.encodeShareLink && s.encodeShareLink()) || window.location.href;
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(link).then(function () {
               window.TrendDeck.toast('Share link copied to clipboard');
@@ -279,11 +315,9 @@
         clearBtn.addEventListener('click', function () {
           var ok = window.confirm('Clear the sample round and start an empty round of your own? This removes the example signals, cards and votes.');
           if (!ok) return;
-          if (window.TrendStore && window.TrendStore.startBlankRound) {
-            window.TrendStore.startBlankRound();
-          } else if (window.TrendStore && window.TrendStore.clearAll) {
-            window.TrendStore.clearAll();
-          }
+          var s = trendStore();
+          if (s && s.clearAll) s.clearAll();
+          if (s && s.createRound) s.createRound('My Trend Round');
           window.TrendDeck.go('round');
           window.TrendDeck.refresh();
           window.TrendDeck.toast('Started a fresh round');
@@ -294,8 +328,9 @@
     function boot() {
       // Ensure storage is seeded (store.js seeds the bundled sample on first run).
       try {
-        if (window.TrendStore && typeof window.TrendStore.init === 'function') {
-          window.TrendStore.init();
+        var s = trendStore();
+        if (s && typeof s.init === 'function') {
+          s.init();
         }
       } catch (err) {
         console.error('TrendDeck: store init failed', err);

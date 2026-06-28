@@ -376,11 +376,18 @@
   }
 
   function initials(label) {
-    return String(label || '?')
+    // Word-initial LETTERS/digits only, so leading quotes/punctuation
+    // (e.g. Chunky "claymorphism") never leak into the badge.
+    var words = String(label || '')
       .split(/\s+/)
-      .slice(0, 2)
-      .map(function (w) { return w.charAt(0).toUpperCase(); })
-      .join('') || '?';
+      .map(function (w) { return w.replace(/^[^0-9a-z]+/i, ''); })
+      .filter(Boolean);
+    if (!words.length) return '?';
+    if (words.length === 1) {
+      var alnum = words[0].replace(/[^0-9a-z]/gi, '');
+      return (alnum.slice(0, 2) || '?').toUpperCase();
+    }
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
   }
 
   function sourcesHtml(card) {
@@ -796,6 +803,10 @@
    * ------------------------------------------------------------------ */
 
   function maybeRouteRender() {
+    // When index.html's hash router is present it drives rendering through the
+    // `trenddeck:render` event into dedicated containers; staying passive here
+    // avoids clobbering <main> (this fallback's generic mount target).
+    if (global.TrendDeck && typeof global.TrendDeck.refresh === 'function') return;
     var hash = (global.location.hash || '').replace(/^#\/?/, '').toLowerCase();
     if (hash === 'dashboard' || hash === 'consensus' || hash === 'results') {
       render();
@@ -807,6 +818,22 @@
   // Only auto-wire if no external router has claimed rendering. We listen for
   // hashchange but stay passive on direct calls from index.html's router.
   global.addEventListener('hashchange', maybeRouteRender);
+
+  // index.html's hash router fires `trenddeck:render` with detail.route when a
+  // view becomes active. Render the Dashboard into #dashboard-root and the
+  // Trend Brief into #brief-root so both paint on the initial route and on nav
+  // changes (the hashchange fallback above mounts to generic containers that do
+  // not exist in this shell).
+  global.document.addEventListener('trenddeck:render', function (ev) {
+    var route = String((ev && ev.detail && ev.detail.route) || '').toLowerCase();
+    if (route === 'dashboard' || route === 'consensus' || route === 'results') {
+      var dRoot = document.getElementById('dashboard-root');
+      if (dRoot) render(dRoot);
+    } else if (route === 'brief') {
+      var bRoot = document.getElementById('brief-root');
+      if (bRoot) renderBrief(bRoot);
+    }
+  });
 
   /* ------------------------------------------------------------------ *
    * Public API

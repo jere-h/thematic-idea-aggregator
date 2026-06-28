@@ -332,7 +332,10 @@
 
   function resolveMount(mount) {
     if (mount && mount.nodeType === 1) return mount;
-    return document.getElementById('view') ||
+    // The router mounts the Vote view into #voting-root; prefer it so internal
+    // re-renders (after a pick/skip) stay scoped to the view body.
+    return document.getElementById('voting-root') ||
+      document.getElementById('view') ||
       document.querySelector('[data-view-mount]') ||
       document.getElementById('vote') ||
       document.getElementById('app');
@@ -485,7 +488,7 @@
       var sel = el.querySelector('#voteDept');
       var dept = sel ? sel.value : ANON_DEPT;
       startSession(round, dept);
-      render(el.closest('[data-view-mount]') || el.parentNode || el);
+      render();
     });
   }
 
@@ -587,14 +590,12 @@
   }
 
   function wireMatchup(el, round, cards, session) {
-    var mount = el.closest && (el.closest('[data-view-mount]')) || el;
-
     var buttons = el.querySelectorAll('.vote-card');
     Array.prototype.forEach.call(buttons, function (btn) {
       btn.addEventListener('click', function () {
         var winnerId = btn.getAttribute('data-card-id');
         recordPick(round, session, winnerId);
-        render(mount);
+        render();
       });
     });
 
@@ -606,7 +607,7 @@
         session.streak = 0;
         if (session.index >= session.pairs.length) session.finished = true;
         saveSession(session);
-        render(mount);
+        render();
       });
     }
 
@@ -614,7 +615,7 @@
     if (restart) {
       restart.addEventListener('click', function () {
         clearSession();
-        render(mount);
+        render();
       });
     }
   }
@@ -677,13 +678,12 @@
   function wireDone(el, round) {
     var again = el.querySelector('#voteAgain');
     if (!again) return;
-    var mount = (el.closest && el.closest('[data-view-mount]')) || el;
     again.addEventListener('click', function () {
       clearSession();
       startSession(round, round && getCards(round).length ? null : null);
       // Re-show the intro so the voter can re-confirm their department.
       clearSession();
-      render(mount);
+      render();
     });
   }
 
@@ -695,6 +695,9 @@
   }
 
   function autoRender() {
+    // Defer to index.html's hash router when present (it drives rendering via
+    // the `trenddeck:render` event into #voting-root).
+    if (window.TrendDeck && typeof window.TrendDeck.refresh === 'function') return;
     if (isVoteHash()) {
       render();
     }
@@ -710,6 +713,16 @@
     },
     clearSession: clearSession
   };
+
+  // index.html's hash router fires `trenddeck:render` with detail.route when a
+  // view becomes active; render into #voting-root so the ballot paints on the
+  // initial route and on every nav change.
+  document.addEventListener('trenddeck:render', function (ev) {
+    var route = String((ev && ev.detail && ev.detail.route) || '').toLowerCase();
+    if (route.indexOf('vote') === -1) return;
+    var root = document.getElementById('voting-root');
+    if (root) render(root);
+  });
 
   // Graceful fallback if the SPA shell does not explicitly call render():
   // self-bind to hash changes and initial load when the vote view is active.

@@ -42,7 +42,7 @@
       label: 'Chunky "claymorphism" 3D icon sets all over app onboarding',
       sourceUrl: 'https://dribbble.com/shots/claymorphism-icons',
       platform: 'Dribbble',
-      thumbnailUrl: 'https://picsum.photos/seed/clay3d/320/200',
+      thumbnailUrl: '',
       note: 'Soft inflated shapes, pastel gradients, long soft shadows.',
       createdAt: ts('2026-06-20', 9, 12)
     },
@@ -51,7 +51,7 @@
       label: 'Brutalist mono-type portfolios with raw HTML aesthetic',
       sourceUrl: 'https://www.are.na/channel/brutalist-web',
       platform: 'Are.na',
-      thumbnailUrl: 'https://picsum.photos/seed/brutweb/320/200',
+      thumbnailUrl: '',
       note: 'Times New Roman, blue underlines, deliberate "unstyled" look.',
       createdAt: ts('2026-06-20', 9, 28)
     },
@@ -60,7 +60,7 @@
       label: 'Risograph-style grain + duotone in editorial layouts',
       sourceUrl: 'https://www.instagram.com/p/riso-editorial',
       platform: 'Instagram',
-      thumbnailUrl: 'https://picsum.photos/seed/riso/320/200',
+      thumbnailUrl: '',
       note: 'Misregistered ink, two-color overprint, visible halftone.',
       createdAt: ts('2026-06-20', 10, 2)
     },
@@ -69,7 +69,7 @@
       label: 'AI "liquid chrome" type treatments on music covers',
       sourceUrl: 'https://www.behance.net/gallery/liquid-chrome',
       platform: 'Behance',
-      thumbnailUrl: 'https://picsum.photos/seed/chrome/320/200',
+      thumbnailUrl: '',
       note: 'Y2K metal, blobby reflective 3D lettering.',
       createdAt: ts('2026-06-20', 10, 40)
     },
@@ -78,7 +78,7 @@
       label: 'Hyper-minimal Swiss grids making a comeback in fintech',
       sourceUrl: 'https://www.pinterest.com/pin/swiss-fintech',
       platform: 'Pinterest',
-      thumbnailUrl: 'https://picsum.photos/seed/swiss/320/200',
+      thumbnailUrl: '',
       note: 'Helvetica, lots of whitespace, strict 12-col grid.',
       createdAt: ts('2026-06-20', 11, 5)
     },
@@ -87,7 +87,7 @@
       label: 'Bento-box dashboards everywhere in SaaS marketing pages',
       sourceUrl: 'https://www.behance.net/gallery/bento-saas',
       platform: 'Behance',
-      thumbnailUrl: 'https://picsum.photos/seed/bento/320/200',
+      thumbnailUrl: '',
       note: 'Rounded modular cards, mixed sizes, Apple keynote vibe.',
       createdAt: ts('2026-06-20', 11, 33)
     },
@@ -96,7 +96,7 @@
       label: 'Hand-drawn doodle annotations layered over clean UI',
       sourceUrl: 'https://dribbble.com/shots/doodle-annotations',
       platform: 'Dribbble',
-      thumbnailUrl: 'https://picsum.photos/seed/doodle/320/200',
+      thumbnailUrl: '',
       note: 'Marker scribbles, arrows, circled CTAs.',
       createdAt: ts('2026-06-20', 12, 1)
     },
@@ -105,7 +105,7 @@
       label: 'Maximalist color clash — acid green + hot magenta',
       sourceUrl: 'https://www.instagram.com/p/acid-maximal',
       platform: 'Instagram',
-      thumbnailUrl: 'https://picsum.photos/seed/acid/320/200',
+      thumbnailUrl: '',
       note: 'Vibrating complementary palettes, anti-tasteful.',
       createdAt: ts('2026-06-21', 9, 15)
     },
@@ -114,7 +114,7 @@
       label: 'Spatial / visionOS glass panels in concept reels',
       sourceUrl: 'https://www.youtube.com/watch?v=spatial-glass',
       platform: 'YouTube',
-      thumbnailUrl: 'https://picsum.photos/seed/spatial/320/200',
+      thumbnailUrl: '',
       note: 'Frosted translucency, depth, floating windows.',
       createdAt: ts('2026-06-21', 9, 44)
     },
@@ -123,7 +123,7 @@
       label: 'Sticker-bomb collage UI in Gen-Z consumer apps',
       sourceUrl: 'https://dribbble.com/shots/sticker-bomb-ui',
       platform: 'Dribbble',
-      thumbnailUrl: 'https://picsum.photos/seed/sticker/320/200',
+      thumbnailUrl: '',
       note: 'Cut-out stickers, tape, scrapbook energy.',
       createdAt: ts('2026-06-21', 10, 10)
     },
@@ -132,7 +132,7 @@
       label: 'Variable fonts animating weight on scroll',
       sourceUrl: 'https://codepen.io/collection/variable-fonts',
       platform: 'CodePen',
-      thumbnailUrl: 'https://picsum.photos/seed/varfont/320/200',
+      thumbnailUrl: '',
       note: 'Type that breathes — width/weight tied to scroll position.',
       createdAt: ts('2026-06-21', 10, 52)
     },
@@ -141,7 +141,7 @@
       label: 'Nostalgic 90s desktop / skeuomorphic window chrome',
       sourceUrl: 'https://www.are.na/channel/90s-desktop',
       platform: 'Are.na',
-      thumbnailUrl: 'https://picsum.photos/seed/win95/320/200',
+      thumbnailUrl: '',
       note: 'Beveled buttons, pixel icons, title bars.',
       createdAt: ts('2026-06-21', 11, 20)
     },
@@ -150,7 +150,7 @@
       label: 'Earthy "new naturalism" palettes — clay, sage, ochre',
       sourceUrl: 'https://www.pinterest.com/pin/new-naturalism',
       platform: 'Pinterest',
-      thumbnailUrl: 'https://picsum.photos/seed/earthy/320/200',
+      thumbnailUrl: '',
       note: 'Muted organic tones, warm neutrals, calm.',
       createdAt: ts('2026-06-21', 11, 48)
     },
@@ -159,7 +159,7 @@
       label: 'Kinetic oversized typography as the entire hero',
       sourceUrl: 'https://www.behance.net/gallery/kinetic-type',
       platform: 'Behance',
-      thumbnailUrl: 'https://picsum.photos/seed/kinetic/320/200',
+      thumbnailUrl: '',
       note: 'Type IS the layout, edge-to-edge, moving.',
       createdAt: ts('2026-06-21', 12, 30)
     },
@@ -168,7 +168,7 @@
       label: 'Pixel-art mascots returning in dev-tool branding',
       sourceUrl: 'https://dribbble.com/shots/pixel-mascot',
       platform: 'Dribbble',
-      thumbnailUrl: 'https://picsum.photos/seed/pixelmascot/320/200',
+      thumbnailUrl: '',
       note: 'Low-res characters, playful, retro game feel.',
       createdAt: ts('2026-06-22', 9, 5)
     },
@@ -177,7 +177,7 @@
       label: 'Glassmorphism 2.0 with noise + grain texture',
       sourceUrl: 'https://www.behance.net/gallery/glass-grain',
       platform: 'Behance',
-      thumbnailUrl: 'https://picsum.photos/seed/glassgrain/320/200',
+      thumbnailUrl: '',
       note: 'Blur panels but grittier — texture over plastic.',
       createdAt: ts('2026-06-22', 9, 26)
     },
@@ -186,7 +186,7 @@
       label: 'Anti-AI "made by humans" hand-lettered badges',
       sourceUrl: 'https://www.instagram.com/p/human-made-badge',
       platform: 'Instagram',
-      thumbnailUrl: 'https://picsum.photos/seed/humanmade/320/200',
+      thumbnailUrl: '',
       note: 'Craft seals signaling authenticity vs generated work.',
       createdAt: ts('2026-06-22', 9, 51)
     },
@@ -195,7 +195,7 @@
       label: 'Data-dense "terminal" aesthetics in crypto/AI dashboards',
       sourceUrl: 'https://dribbble.com/shots/terminal-ui',
       platform: 'Dribbble',
-      thumbnailUrl: 'https://picsum.photos/seed/terminal/320/200',
+      thumbnailUrl: '',
       note: 'Monospace, green-on-black, scanlines, command bars.',
       createdAt: ts('2026-06-22', 10, 18)
     },
@@ -204,7 +204,7 @@
       label: 'Soft gradient mesh backgrounds replacing flat fills',
       sourceUrl: 'https://www.pinterest.com/pin/mesh-gradient',
       platform: 'Pinterest',
-      thumbnailUrl: 'https://picsum.photos/seed/mesh/320/200',
+      thumbnailUrl: '',
       note: 'Blurred multi-stop gradients, aurora-like.',
       createdAt: ts('2026-06-22', 10, 42)
     },
@@ -213,7 +213,7 @@
       label: 'Scrappy phone-shot UGC look in brand campaigns',
       sourceUrl: 'https://www.instagram.com/p/ugc-scrappy',
       platform: 'Instagram',
-      thumbnailUrl: 'https://picsum.photos/seed/ugc/320/200',
+      thumbnailUrl: '',
       note: 'Flash photos, imperfect crops, authenticity over polish.',
       createdAt: ts('2026-06-22', 11, 9)
     }
@@ -234,7 +234,7 @@
       signalIds: ['sig-01', 'sig-16'],
       sources: { Dribbble: 1, Behance: 1 },
       score: 78,
-      thumbnailUrl: 'https://picsum.photos/seed/clay3d/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 2)
     },
     {
@@ -246,7 +246,7 @@
       signalIds: ['sig-02', 'sig-12'],
       sources: { 'Are.na': 2 },
       score: 61,
-      thumbnailUrl: 'https://picsum.photos/seed/brutweb/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 6)
     },
     {
@@ -258,7 +258,7 @@
       signalIds: ['sig-03'],
       sources: { Instagram: 1 },
       score: 66,
-      thumbnailUrl: 'https://picsum.photos/seed/riso/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 9)
     },
     {
@@ -270,7 +270,7 @@
       signalIds: ['sig-04'],
       sources: { Behance: 1 },
       score: 70,
-      thumbnailUrl: 'https://picsum.photos/seed/chrome/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 12)
     },
     {
@@ -282,7 +282,7 @@
       signalIds: ['sig-05'],
       sources: { Pinterest: 1 },
       score: 64,
-      thumbnailUrl: 'https://picsum.photos/seed/swiss/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 15)
     },
     {
@@ -294,7 +294,7 @@
       signalIds: ['sig-06'],
       sources: { Behance: 1 },
       score: 72,
-      thumbnailUrl: 'https://picsum.photos/seed/bento/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 18)
     },
     {
@@ -306,7 +306,7 @@
       signalIds: ['sig-07', 'sig-10'],
       sources: { Dribbble: 2 },
       score: 58,
-      thumbnailUrl: 'https://picsum.photos/seed/sticker/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 21)
     },
     {
@@ -318,7 +318,7 @@
       signalIds: ['sig-08'],
       sources: { Instagram: 1 },
       score: 52,
-      thumbnailUrl: 'https://picsum.photos/seed/acid/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 24)
     },
     {
@@ -330,7 +330,7 @@
       signalIds: ['sig-09', 'sig-19'],
       sources: { YouTube: 1, Pinterest: 1 },
       score: 69,
-      thumbnailUrl: 'https://picsum.photos/seed/spatial/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 27)
     },
     {
@@ -342,7 +342,7 @@
       signalIds: ['sig-11', 'sig-14'],
       sources: { CodePen: 1, Behance: 1 },
       score: 74,
-      thumbnailUrl: 'https://picsum.photos/seed/kinetic/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 30)
     },
     {
@@ -354,7 +354,7 @@
       signalIds: ['sig-13'],
       sources: { Pinterest: 1 },
       score: 60,
-      thumbnailUrl: 'https://picsum.photos/seed/earthy/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 33)
     },
     {
@@ -366,7 +366,7 @@
       signalIds: ['sig-15', 'sig-17', 'sig-18', 'sig-20'],
       sources: { Dribbble: 2, Instagram: 2 },
       score: 67,
-      thumbnailUrl: 'https://picsum.photos/seed/humanmade/320/200',
+      thumbnailUrl: '',
       createdAt: ts('2026-06-22', 13, 36)
     }
   ];
@@ -476,6 +476,7 @@
   var ROUND = {
     id: 'sample-round-2026-q2',
     isSample: true,
+    name: 'SS26 Visual Trends — Studio Round (Sample)',
     studio: {
       id: 'sample-studio',
       name: 'Northlight Studio (sample)'

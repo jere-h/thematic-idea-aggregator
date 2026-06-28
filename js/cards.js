@@ -934,6 +934,11 @@
   }
 
   function maybeMount() {
+    // Defer to index.html's hash router when present: it dispatches
+    // `trenddeck:render` and we mount into #cards-root from that handler.
+    // Rendering here too would target the whole [data-view="cards"] section and
+    // wipe its static header.
+    if (window.TrendDeck && typeof window.TrendDeck.refresh === 'function') return;
     var dedicated = document.querySelector('#cards-view, [data-view="cards"]');
     if (dedicated) { renderInto(dedicated); return; }
     if (routeIsCards()) {
@@ -948,6 +953,15 @@
     window.addEventListener('hashchange', maybeMount);
     document.addEventListener('trenddeck:round-changed', function () {
       if (currentContainer) render();
+    });
+    // index.html's hash router fires `trenddeck:render` with detail.route when a
+    // view becomes active; mount into #cards-root so the gallery paints on the
+    // initial route and on every nav change, not only on hashchange.
+    document.addEventListener('trenddeck:render', function (ev) {
+      var route = String((ev && ev.detail && ev.detail.route) || '').toLowerCase();
+      if (route.indexOf('card') === -1) return;
+      var root = document.getElementById('cards-root');
+      if (root) renderInto(root);
     });
     maybeMount();
   }

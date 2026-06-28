@@ -278,6 +278,13 @@
       if (isObject(c) && typeof c.getSampleRound === 'function') {
         try { c = c.getSampleRound(); } catch (e) { c = null; }
       }
+      // Prefer a wrapper's named `.round` (the documented contract:
+      // window.TRENDDECK_SAMPLE.round) over the wrapper itself, which carries
+      // signals/cards/votes but no round name → an "Untitled Round" seed.
+      if (isObject(c) && isObject(c.round) &&
+          (c.round.signals || c.round.cards || c.round.votes)) {
+        return clone(c.round);
+      }
       if (isObject(c) && (c.signals || c.cards || c.votes)) {
         return clone(c);
       }
