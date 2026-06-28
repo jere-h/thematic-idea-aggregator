@@ -2020,9 +2020,9 @@ textarea:focus {
   text-align: center;
 }
 
-.td-lb-row:nth-child(1) .td-rank { color: var(--gold); }
-.td-lb-row:nth-child(2) .td-rank { color: var(--silver); }
-.td-lb-row:nth-child(3) .td-rank { color: var(--bronze); }
+.td-lb-medal-1 .td-rank { color: var(--gold); }
+.td-lb-medal-2 .td-rank { color: var(--silver); }
+.td-lb-medal-3 .td-rank { color: var(--bronze); }
 
 .td-thumb {
   width: 56px;
@@ -2087,6 +2087,12 @@ textarea:focus {
   border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
+
+/* Single-appearance rows: grey the win-rate bar and amber-flag the caveat so
+   a "100% from one match-up" row never reads as a confident win. Placed after
+   .td-bar-fill so it wins on equal specificity, even over a medal row. */
+.td-lb-lown .td-bar-fill { background: var(--text-faint); }
+.td-lb-onceflag { color: var(--warn); }
 
 .td-lb-meta {
   display: flex;

@@ -29,6 +29,15 @@
   // for a studio round (~one voter completing one MIN_PAIRS=6 session twice).
   var LOW_CONFIDENCE_VOTES = 12;
 
+  // Anonymous / non-department buckets that must never occupy a department
+  // card or appear in the "suppressed" list. voteDepartment() maps blank to
+  // 'Unspecified'; voting.js sends the literal 'Prefer not to say' (ANON_DEPT).
+  var NON_DEPARTMENTS = {
+    'Prefer not to say': true,
+    'Unspecified': true,
+    'Anonymous': true
+  };
+
   /* ------------------------------------------------------------------ *
    * Store / round access (defensive across possible store shapes)
    * ------------------------------------------------------------------ */
@@ -76,8 +85,9 @@
       deptSuppressionThreshold:
         numberOr(settings.deptSuppressionThreshold,
           numberOr(settings.deptThreshold,
-            numberOr(settings.smallDeptThreshold, 3))),
-      roundClosed: !!(settings.roundClosed || (round && round.closed))
+            numberOr(settings.smallDeptThreshold, 2))),
+      roundClosed: !!(settings.closed || settings.roundClosed ||
+        (round && round.closed))
     };
   }
 
@@ -268,7 +278,9 @@
 
   function computeDepartments(round) {
     round = round || getRound();
-    if (!round) return { departments: [], suppressed: [], threshold: 0 };
+    if (!round) {
+      return { departments: [], suppressed: [], threshold: 0, realDeptCount: 0 };
+    }
     var settings = getSettings(round);
     var threshold = settings.deptSuppressionThreshold;
     var index = buildCardIndex(round);
@@ -309,10 +321,15 @@
 
     var departments = [];
     var suppressed = [];
+    var realDeptCount = 0;
 
     Object.keys(groups).forEach(function (dept) {
+      // Fold anonymous / non-department buckets out of the grid entirely:
+      // they form neither a visible dept card nor a "suppressed" entry.
+      if (NON_DEPARTMENTS[dept]) return;
       var g = groups[dept];
       var voterCount = Object.keys(g.voters).length;
+      realDeptCount++;
       // Build ranked card list for this department.
       var cards = Object.keys(g.cardStats).map(function (id) {
         var cs = g.cardStats[id];
@@ -343,7 +360,12 @@
     departments.sort(function (a, b) { return b.votes - a.votes; });
     suppressed.sort(function (a, b) { return b.votes - a.votes; });
 
-    return { departments: departments, suppressed: suppressed, threshold: threshold };
+    return {
+      departments: departments,
+      suppressed: suppressed,
+      threshold: threshold,
+      realDeptCount: realDeptCount
+    };
   }
 
   function totals(round) {
@@ -596,7 +618,7 @@
         'suppression threshold.</p>';
     }
     var closed = !!settings.roundClosed;
-    var threshold = numberOr(settings.deptSuppressionThreshold, 3);
+    var threshold = numberOr(settings.deptSuppressionThreshold, 2);
     var html = '<div class="td-admin" role="group" aria-label="Round controls">';
     html += '<div class="td-admin-cluster">';
     html += '<button type="button" class="td-btn" id="td-toggle-closed" aria-pressed="' +
@@ -655,8 +677,8 @@
       (settings.roundClosed ? ' · <strong>round closed</strong>' : '') +
       (sampleBadge ? ' ' + sampleBadge : '') + '</p></div>';
     html += '<div class="td-dash-actions">';
-    html += '<button type="button" class="td-btn td-btn-primary" id="td-export-brief">Export Trend Brief</button>';
-    html += '<button type="button" class="td-btn" id="td-export-pdf">Download PDF</button>';
+    html += '<button type="button" class="td-btn td-btn-primary" id="td-export-brief">Print / Save as PDF</button>';
+    html += '<button type="button" class="td-btn" id="td-export-pdf" title="Generates a lightweight text-only PDF via jsPDF — no thumbnails, win-rate bars, or imagery. For the designed layout, use Print / Save as PDF.">Plain-text PDF (no images)</button>';
     html += '</div></header>';
 
     html += adminStripHtml(settings, isSample);
@@ -667,12 +689,25 @@
     }
 
     /* ---- Leaderboard ---- */
+    // Medal coloring is withheld for low-confidence rounds (total votes below
+    // LOW_CONFIDENCE_VOTES) or when the top win-rates are tied — both cases
+    // where a gold/silver/bronze podium would imply precision the sample lacks.
+    var medalsAllowed = (t.votes >= LOW_CONFIDENCE_VOTES);
+    var topTied = leaderboard.length >= 1 && (
+      (leaderboard[1] && leaderboard[1].winRate === leaderboard[0].winRate) ||
+      (leaderboard[2] && leaderboard[2].winRate === leaderboard[0].winRate)
+    );
+    medalsAllowed = medalsAllowed && !topTied;
+
     html += '<h3 class="td-section-title">Win-rate leaderboard</h3>';
     html += '<ol class="td-leaderboard">';
     leaderboard.forEach(function (row) {
       var card = row.card;
       var score = cardScore(card);
-      html += '<li class="td-lb-row">';
+      var classes = ['td-lb-row'];
+      if (medalsAllowed && row.rank <= 3) classes.push('td-lb-medal-' + row.rank);
+      if (row.appearances === 1) classes.push('td-lb-lown');
+      html += '<li class="' + classes.join(' ') + '">';
       html += '<span class="td-rank">' + row.rank + '</span>';
       html += thumbHtml(card, 'td-thumb', index);
       html += '<div class="td-lb-body">';
@@ -683,7 +718,9 @@
         pct(row.winRate) + '%"></span></div>';
       html += '<div class="td-lb-meta">' +
         '<span title="Head-to-head wins">' + row.wins + ' wins</span>' +
-        '<span title="Times shown in a pair">' + row.appearances + ' appearances</span>' +
+        (row.appearances === 1
+          ? '<span class="td-lb-onceflag" title="Times shown in a pair">only 1 appearance</span>'
+          : '<span title="Times shown in a pair">' + row.appearances + ' appearances</span>') +
         (score !== null && isFinite(score) ? '<span title="Composite score">score ' +
           (Math.round(score * 10) / 10) + '</span>' : '') +
         '</div>';
@@ -702,9 +739,7 @@
       '<span class="td-muted td-small">(small departments under ' +
       deptData.threshold + ' voters are suppressed)</span></h3>';
 
-    if (!deptData.departments.length && !deptData.suppressed.length) {
-      html += '<p class="td-muted">No department data yet.</p>';
-    } else {
+    if (deptData.departments.length) {
       html += '<div class="td-dept-grid">';
       deptData.departments.forEach(function (d) {
         html += '<div class="td-dept-card">';
@@ -726,6 +761,22 @@
             return esc(d.dept) + ' (' + d.voters + ')';
           }).join(', ') + '.</p>';
       }
+    } else {
+      // No visible departments: explain the unlock threshold in plain language
+      // rather than rendering an empty grid or 'No department data yet.'.
+      var tail;
+      if (deptData.suppressed.length) {
+        var closest = deptData.suppressed[0];
+        deptData.suppressed.forEach(function (d) {
+          if (d.voters > closest.voters) closest = d;
+        });
+        tail = 'So far the closest is ' + esc(closest.dept) + ' with ' +
+          closest.voters + (closest.voters === 1 ? ' voter' : ' voters') + '.';
+      } else {
+        tail = 'Right now all votes are anonymous (no team selected).';
+      }
+      html += '<p class="td-muted">Department breakdown unlocks once ' +
+        deptData.threshold + '+ people from the same team vote. ' + tail + '</p>';
     }
 
     html += '</section>';
@@ -761,7 +812,7 @@
         var n = parseInt(raw, 10);
         if (raw === '' || isNaN(n)) {
           // Restore the field to the stored value; do not write a bad value.
-          threshInput.value = numberOr(getSettings(getRound()).deptSuppressionThreshold, 3);
+          threshInput.value = numberOr(getSettings(getRound()).deptSuppressionThreshold, 2);
           return;
         }
         if (n < 0) n = 0;
@@ -864,9 +915,10 @@
       });
       html += '</div>';
     } else {
-      html += '<p class="brief-muted">No departments above the suppression threshold.</p>';
+      html += '<p class="brief-muted">Department breakdown unlocks once ' +
+        deptData.threshold + '+ people from the same team vote.</p>';
     }
-    if (deptData.suppressed.length) {
+    if (deptData.suppressed.length && deptData.departments.length) {
       html += '<p class="brief-muted">Suppressed (under ' + deptData.threshold +
         ' voters): ' + deptData.suppressed.map(function (d) {
           return esc(d.dept);
@@ -897,7 +949,7 @@
     var html = '<section class="td-brief-view">';
     html += '<div class="td-brief-toolbar td-no-print">';
     html += '<button type="button" class="td-btn td-btn-primary" id="td-brief-print">Print / Save as PDF</button>';
-    html += '<button type="button" class="td-btn" id="td-brief-pdf">Download PDF (jsPDF)</button>';
+    html += '<button type="button" class="td-btn" id="td-brief-pdf" title="Generates a lightweight text-only PDF via jsPDF — no thumbnails, win-rate bars, or imagery. For the designed layout, use Print / Save as PDF.">Plain-text PDF (no images)</button>';
     html += '</div>';
     html += buildBriefHtml(round);
     html += '</section>';

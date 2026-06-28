@@ -83,6 +83,150 @@
     }
   }
 
+  // ---- Signal resolution (ported verbatim from dashboard.js) -----
+  // Resolve a user card's signalIds against the active round's signals at
+  // render time so the Vote ballot shows the SAME imagery + chips as the
+  // Dashboard. Field-name lists and resolution order MUST match dashboard.js
+  // so the two surfaces can never drift.
+
+  function firstOf(obj /*, keys... */) {
+    for (var i = 1; i < arguments.length; i++) {
+      var k = arguments[i];
+      if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
+        return obj[k];
+      }
+    }
+    return undefined;
+  }
+
+  function cardSignals(card) {
+    var sig = firstOf(card, 'signals', 'members', 'signalIds', 'signal_ids', 'items');
+    return Array.isArray(sig) ? sig : [];
+  }
+
+  function buildSignalIndex(round) {
+    var byId = {};
+    (round && round.signals ? round.signals : []).forEach(function (sig) {
+      if (!sig || typeof sig !== 'object') return;
+      var id = firstOf(sig, 'id', 'signalId', 'signal_id');
+      if (id === undefined) return;
+      byId[String(id)] = sig;
+    });
+    return { byId: byId };
+  }
+
+  function sigTheme(sig) {
+    return firstOf(sig, 'theme', 'label', 'title', 'name') || '';
+  }
+  function sigUrl(sig) {
+    return firstOf(sig, 'sourceUrl', 'url', 'source', 'href', 'link') || '';
+  }
+  function sigThumbUrl(sig) {
+    return firstOf(sig, 'thumbnailUrl', 'thumbnail', 'image', 'imageUrl', 'img') || '';
+  }
+
+  function platformFromHost(url) {
+    var v = String(url || '').trim();
+    if (!v) return '';
+    var host = '';
+    try {
+      host = new URL(v).hostname.toLowerCase().replace(/^www\./, '');
+    } catch (e) {
+      return '';
+    }
+    if (!host) return '';
+    var map = [
+      ['instagram.com', 'Instagram'],
+      ['tiktok.com', 'TikTok'],
+      ['pinterest.', 'Pinterest'],
+      ['behance.net', 'Behance'],
+      ['dribbble.com', 'Dribbble'],
+      ['youtube.com', 'YouTube'],
+      ['youtu.be', 'YouTube'],
+      ['twitter.com', 'X / Twitter'],
+      ['x.com', 'X / Twitter'],
+      ['threads.net', 'Threads'],
+      ['vimeo.com', 'Vimeo'],
+      ['are.na', 'Are.na'],
+      ['arena.com', 'Are.na'],
+      ['medium.com', 'Medium'],
+      ['substack.com', 'Substack'],
+      ['reddit.com', 'Reddit'],
+      ['wgsn.com', 'WGSN'],
+      ['notjustalabel', 'NJAL'],
+      ['cosmos.so', 'Cosmos'],
+      ['savee.it', 'Savee']
+    ];
+    for (var i = 0; i < map.length; i++) {
+      if (host.indexOf(map[i][0]) !== -1) return map[i][1];
+    }
+    var parts = host.split('.');
+    var base = parts.length >= 2 ? parts[parts.length - 2] : host;
+    if (!base) return '';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+
+  function sigPlatform(sig) {
+    var p = firstOf(sig, 'platform');
+    if (p) return String(p).trim();
+    var fromUrl = platformFromHost(sigUrl(sig));
+    return fromUrl || 'Web';
+  }
+
+  function resolveMembers(card, index) {
+    var out = [];
+    if (!index) return out;
+    cardSignals(card).forEach(function (ref) {
+      var id = (ref && typeof ref === 'object')
+        ? (ref.id || ref.cardId || ref.signalId) : ref;
+      if (id === undefined || id === null) return;
+      var sig = index.byId[String(id)];
+      if (sig) out.push(sig);
+    });
+    return out;
+  }
+
+  function hashStr(str) {
+    var h = 5381;
+    str = String(str || '');
+    for (var i = 0; i < str.length; i++) {
+      h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+  }
+
+  function initials(label) {
+    var words = String(label || '')
+      .split(/\s+/)
+      .map(function (w) { return w.replace(/^[^0-9a-z]+/i, ''); })
+      .filter(Boolean);
+    if (!words.length) return '?';
+    if (words.length === 1) {
+      var alnum = words[0].replace(/[^0-9a-z]/gi, '');
+      return (alnum.slice(0, 2) || '?').toUpperCase();
+    }
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+  }
+
+  function placeholderSvg(text) {
+    var h = hashStr(text);
+    var hue = h % 360;
+    var hue2 = (hue + 40) % 360;
+    var label = escapeHtml(initials(text));
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="' + label + '">' +
+        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0" stop-color="hsl(' + hue + ',62%,46%)"/>' +
+          '<stop offset="1" stop-color="hsl(' + hue2 + ',58%,32%)"/>' +
+        '</linearGradient></defs>' +
+        '<rect width="320" height="200" fill="url(#g)"/>' +
+        '<text x="160" y="112" text-anchor="middle" font-family="' +
+          '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif" ' +
+          'font-size="72" font-weight="700" fill="rgba(255,255,255,0.92)">' + label + '</text>' +
+      '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
   // ---- Store adapter ---------------------------------------------
   // Wrap whatever store.js exposes, falling back to direct localStorage
   // so the voting view never hard-crashes if a method name differs.
@@ -161,6 +305,18 @@
     return list;
   }
 
+  // Distinct people who have voted on THIS device — the number of distinct
+  // non-empty vote.sessionId values across the round's votes.
+  function countVoters(round) {
+    var seen = {};
+    var votes = (round && Array.isArray(round.votes)) ? round.votes : [];
+    votes.forEach(function (v) {
+      var sid = String((v && v.sessionId) || '').trim();
+      if (sid) seen[sid] = true;
+    });
+    return Object.keys(seen).length;
+  }
+
   function cardId(card) {
     return card && (card.id || card.cardId || card.label);
   }
@@ -173,50 +329,83 @@
     return (card && (card.rationale || card.summary || card.description)) || '';
   }
 
-  function cardThumb(card) {
-    var url = card && (card.thumbnail || card.thumbnailUrl ||
-      card.thumbnail_url || card.image || card.imageUrl);
-    if (isHttpUrl(url)) {
-      return '<div class="vote-card__thumb">' +
-        '<img src="' + escapeHtml(url) + '" alt="" loading="lazy" ' +
-        'onerror="this.style.display=&#39;none&#39;;' +
-        'this.parentNode.classList.add(&#39;vote-card__thumb--missing&#39;)">' +
-        '</div>';
-    }
-    // Fallback to a labeled link/source chip.
-    var sources = collectSources(card);
-    var chip = sources.length
-      ? escapeHtml(sources[0])
-      : 'No preview';
-    return '<div class="vote-card__thumb vote-card__thumb--missing">' +
-      '<span class="vote-card__chip">' + chip + '</span></div>';
+  // Emit the standard <img> thumb markup (same onerror handling as before).
+  function thumbImgHtml(src) {
+    return '<div class="vote-card__thumb">' +
+      '<img src="' + escapeHtml(src) + '" alt="" loading="lazy" ' +
+      'onerror="this.style.display=&#39;none&#39;;' +
+      'this.parentNode.classList.add(&#39;vote-card__thumb--missing&#39;)">' +
+      '</div>';
   }
 
-  function collectSources(card) {
-    var out = [];
-    if (!card) return out;
-    var sources = card.sources || card.platforms || card.sourceBreakdown ||
+  // Resolution order MUST match dashboard.thumbHtml exactly so the Vote ballot
+  // and the Dashboard show identical imagery for the same card.
+  function cardThumb(card, sigIndex) {
+    // (1) Explicit card thumbnail wins (preserves the sample byte-for-byte).
+    var url = card && (card.thumbnail || card.thumbnailUrl ||
+      card.thumbnail_url || card.image || card.imageUrl);
+    if (isHttpUrl(url)) return thumbImgHtml(url);
+
+    // (2..3) Resolve member signals against the active round's signal index.
+    var members = resolveMembers(card, sigIndex);
+    if (members.length) {
+      // (2) First member with a real thumbnail URL.
+      for (var i = 0; i < members.length; i++) {
+        var t = sigThumbUrl(members[i]);
+        if (isHttpUrl(t)) return thumbImgHtml(t);
+      }
+      // (3) Deterministic placeholder SVG seeded from the first member's theme.
+      // Rendered through the SAME <img> markup as a real thumb (designed
+      // imagery, NOT a missing state) — do not mark it --missing.
+      var seed = sigTheme(members[0]) || cardLabel(card);
+      return thumbImgHtml(placeholderSvg(seed));
+    }
+
+    // (4) Nothing resolvable -> graceful labeled monogram tile (never the
+    // literal grey 'No preview' string).
+    return '<div class="vote-card__thumb vote-card__thumb--missing">' +
+      '<span class="vote-card__chip">' + escapeHtml(initials(cardLabel(card))) +
+      '</span></div>';
+  }
+
+  // Resolve the source-chip labels for a card. Mirrors dashboard.sourcesHtml's
+  // DATA logic: explicit card.sources wins; otherwise count resolved member
+  // platforms; an unresolved 'sig-…' id is NEVER rendered as a chip.
+  function resolveSources(card, sigIndex) {
+    if (!card) return [];
+
+    // (1) Explicit sources map/array on the card wins (preserves the sample).
+    var explicit = card.sources || card.platforms || card.sourceBreakdown ||
       card.source_breakdown;
-    if (Array.isArray(sources)) {
-      sources.forEach(function (s) {
+    var out = [];
+    if (Array.isArray(explicit)) {
+      explicit.forEach(function (s) {
         if (typeof s === 'string') out.push(s);
         else if (s && s.platform) out.push(s.platform);
         else if (s && s.name) out.push(s.name);
-        else if (s && s.url) out.push(safeHostname(s.url));
+        else if (s && s.label) out.push(s.label);
       });
-    } else if (sources && typeof sources === 'object') {
-      Object.keys(sources).forEach(function (k) { out.push(k); });
+    } else if (explicit && typeof explicit === 'object') {
+      // Object-key order, preserving the sample's { Dribbble:1, Behance:1 }.
+      Object.keys(explicit).forEach(function (k) { out.push(k); });
     }
-    // Derive from grouped signals if present.
-    if (!out.length && Array.isArray(card.signals)) {
-      card.signals.forEach(function (sig) {
-        var u = sig && (sig.url || sig.source);
-        if (isHttpUrl(u)) out.push(safeHostname(u));
-        else if (typeof sig === 'string') out.push(sig);
-      });
-    }
-    // De-dupe.
-    return out.filter(function (v, i) { return v && out.indexOf(v) === i; });
+    if (out.length) return out;
+
+    // (2) Build a platform count map from resolved members, sorted by count
+    // desc then label asc (verbatim dashboard.sourcesHtml ordering).
+    var members = resolveMembers(card, sigIndex);
+    if (!members.length) return [];
+    var counts = {};
+    members.forEach(function (sig) {
+      var p = sigPlatform(sig);
+      counts[p] = (counts[p] || 0) + 1;
+    });
+    return Object.keys(counts).map(function (p) {
+      return { label: p, count: counts[p] };
+    }).sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label).localeCompare(String(b.label));
+    }).map(function (s) { return s.label; });
   }
 
   // ---- Session state ---------------------------------------------
@@ -369,7 +558,10 @@
       return;
     }
 
-    el.innerHTML = matchupHtml(round, cards, session);
+    // Build the signal index ONCE per render (not once per card) so the ballot
+    // resolves cards identically to the Dashboard.
+    var sigIndex = buildSignalIndex(round);
+    el.innerHTML = matchupHtml(round, cards, session, sigIndex);
     wireMatchup(el, round, cards, session);
   }
 
@@ -421,6 +613,12 @@
         escapeHtml(d) + '</option>';
     }).join('');
 
+    var nVoters = countVoters(round);
+    var countLine = nVoters >= 1
+      ? '<p class="vote-intro__lede"><strong>' + nVoters + '</strong> ' +
+        (nVoters === 1 ? 'person has' : 'people have') + ' voted so far.</p>'
+      : '';
+
     var sampleNote = round.sample || round.isSample || round.example
       ? '<p class="vote-intro__sample-note">You are looking at the bundled ' +
         '<strong>example round</strong>. Your votes are saved locally and ' +
@@ -437,6 +635,7 @@
              ' trend cards in this round. Click the card you would rather see ' +
              'the studio build a story around. Keep a voting streak going \u2014 ' +
              'skipping a match-up resets it.</p>' +
+      countLine +
       sampleNote +
       '    <form class="vote-intro__form" id="voteStartForm">' +
       '      <label class="field">' +
@@ -472,8 +671,10 @@
     return null;
   }
 
-  function voteCardHtml(card, side) {
-    var sources = collectSources(card);
+  function voteCardHtml(card, side, sigIndex) {
+    // Render bare platform labels (no count) to keep the blind ballot
+    // uncluttered — the count badge belongs on the Dashboard, not here.
+    var sources = resolveSources(card, sigIndex);
     var chips = sources.slice(0, 4).map(function (s) {
       return '<span class="vote-card__source">' + escapeHtml(s) + '</span>';
     }).join('');
@@ -483,7 +684,7 @@
       '<button type="button" class="vote-card vote-card--' + side + '" ' +
         'data-card-id="' + escapeHtml(cardId(card)) + '">' +
       '  <span class="vote-card__side-tag">' + side.toUpperCase() + '</span>' +
-      cardThumb(card) +
+      cardThumb(card, sigIndex) +
       '  <span class="vote-card__body">' +
       '    <span class="vote-card__label">' + escapeHtml(cardLabel(card)) + '</span>' +
       (rationale
@@ -509,7 +710,7 @@
       '</div>';
   }
 
-  function matchupHtml(round, cards, session) {
+  function matchupHtml(round, cards, session, sigIndex) {
     var pair = session.pairs[session.index];
     var a = findCard(cards, pair[0]);
     var b = findCard(cards, pair[1]);
@@ -520,7 +721,7 @@
       saveSession(session);
       return matchupHtml(round, cards, session.index < session.pairs.length
         ? session
-        : (session.finished = true, session));
+        : (session.finished = true, session), sigIndex);
     }
 
     var total = session.pairs.length;
@@ -542,9 +743,9 @@
       streakBadge(session) +
       '  </header>' +
       '  <div class="vote-arena">' +
-      voteCardHtml(a, 'a') +
+      voteCardHtml(a, 'a', sigIndex) +
       '    <div class="vote-arena__vs" aria-hidden="true">VS</div>' +
-      voteCardHtml(b, 'b') +
+      voteCardHtml(b, 'b', sigIndex) +
       '  </div>' +
       '  <footer class="vote-foot">' +
       '    ' + deptLine +
@@ -657,6 +858,12 @@
       ? 'Recorded as <strong>' + escapeHtml(session.department) + '</strong>.'
       : 'Recorded anonymously.';
 
+    var n = countVoters(round);
+    var participation = '<p class="vote-done__hint"><strong>' + n + '</strong> voter' +
+      (n === 1 ? '' : 's') + ' ' + (n === 1 ? 'has' : 'have') +
+      ' contributed on this device so far. Hand the laptop to the next person, ' +
+      'or share the round link to collect votes from other devices.</p>';
+
     return '' +
       '<section class="view view--vote view--vote-done">' +
       '  <div class="vote-done card-panel">' +
@@ -665,25 +872,24 @@
       '    <p>You voted on <strong>' + voted + '</strong> match-up' +
            (voted === 1 ? '' : 's') + '. Best streak: <strong>' + best +
            ' \uD83D\uDD25</strong>. ' + deptLine + '</p>' +
-      '    <p class="vote-done__hint">Every vote is stored in this browser. ' +
-           'To combine votes from other people, the admin can export this ' +
-           'round and merge the files, or share the round link.</p>' +
+      participation +
       '    <div class="vote-done__actions">' +
-      '      <a class="btn btn--primary" href="#/dashboard">See live results</a>' +
-      '      <button type="button" class="btn btn--ghost" id="voteAgain">' +
-             'Vote again (new session)</button>' +
+      '      <button type="button" class="btn btn--primary" id="voteNext">' +
+             'Next voter \u2192</button>' +
+      '      <a class="btn btn--ghost" href="#/dashboard">See live results</a>' +
       '    </div>' +
       '  </div>' +
       '</section>';
   }
 
   function wireDone(el, round) {
-    var again = el.querySelector('#voteAgain');
+    // 'Next voter' handoff: clear the current session (sessionStorage) and
+    // re-render. With no started session, render() falls through to the intro,
+    // where the next voter picks their department and gets a fresh sessionId
+    // via startSession on submit. Exactly one clear + one render per click.
+    var again = el.querySelector('#voteNext');
     if (!again) return;
     again.addEventListener('click', function () {
-      clearSession();
-      startSession(round, round && getCards(round).length ? null : null);
-      // Re-show the intro so the voter can re-confirm their department.
       clearSession();
       render();
     });

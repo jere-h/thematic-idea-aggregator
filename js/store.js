@@ -27,7 +27,7 @@
   var STORAGE_KEY = 'trenddeck.state.v1';
   var SESSION_KEY = 'trenddeck.session.v1';
   var SCHEMA_VERSION = 1;
-  var DEFAULT_DEPT_THRESHOLD = 3;
+  var DEFAULT_DEPT_THRESHOLD = 2;
 
   /* ----------------------------------------------------------------
    * Low-level helpers
