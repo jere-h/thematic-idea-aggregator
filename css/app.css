@@ -30,10 +30,24 @@
   box-sizing: border-box;
 }
 
+/* Responsive media baseline: keep images/SVG/video within their container so a
+   data-URI SVG that carries intrinsic width/height (e.g. the 320x200 signal
+   thumbnails) can never push the page wider than the viewport on a phone. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
+  /* Belt-and-braces against accidental sideways scroll on small screens. */
+  overflow-x: hidden;
 }
 
 body {
@@ -196,6 +210,31 @@ main {
 
 .view {
   animation: fade 0.25s ease;
+}
+
+/* Mobile gutters: keep a comfortable edge so text inside cards/panels isn't
+   jammed against the viewport, while preventing any element from overflowing
+   the narrow screen. Desktop spacing (the defaults above) is untouched. */
+@media (max-width: 560px) {
+  main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+
+  .sig-row {
+    grid-template-columns: 48px 1fr auto;
+    gap: 0.6rem;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .sig-thumb {
+    width: 48px;
+    height: 32px;
+  }
 }
 
 @keyframes fade {
@@ -536,6 +575,76 @@ textarea:focus {
 .signal .actions {
   display: flex;
   gap: 0.35rem;
+}
+
+/* ---------- Signals view (js/ingestion.js: .sig-row / .sig-thumb) ----------
+   These classes are emitted by the ingestion module. .sig-thumb is an <img>
+   whose data-URI SVG carries intrinsic width="320" height="200"; the global
+   img reset already caps it at the container width, and the rules below give it
+   a tidy fixed-size, aspect-correct slot inside the row so it never bleeds. */
+.signal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sig-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 0.85rem;
+  align-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+}
+
+.sig-thumb {
+  width: 56px;
+  height: 36px;
+  max-width: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+
+.sig-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sig-theme {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sig-sub {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: baseline;
+}
+
+/* Source links can be long, unbroken URLs — let them wrap instead of pushing
+   the row (and the page) sideways on a phone. This also covers the equivalent
+   URL/source classes emitted by the Cards and Vote modules so no route can be
+   forced wider than the viewport by an unbreakable link. */
+.sig-source,
+.vote-card__source,
+.vote-card__sources,
+.link-chip,
+.trend-card-meta,
+.sig-sub {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ---------- Chips / tags ---------- */
