@@ -376,19 +376,161 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Signal resolution (resolve a user card's signalIds against the round's
+   * signals at RENDER time — never mutate the persisted card shape). Mirrors
+   * store.normalizeSignal field names (id / sourceUrl / thumbnailUrl / platform
+   * / theme) and store.platformFromHost's host->platform mapping.
+   * ------------------------------------------------------------------ */
+
+  function buildSignalIndex(round) {
+    var byId = {};
+    (round && round.signals ? round.signals : []).forEach(function (sig) {
+      if (!sig || typeof sig !== 'object') return;
+      var id = firstOf(sig, 'id', 'signalId', 'signal_id');
+      if (id === undefined) return;
+      byId[String(id)] = sig;
+    });
+    return { byId: byId };
+  }
+
+  function sigTheme(sig) {
+    return firstOf(sig, 'theme', 'label', 'title', 'name') || '';
+  }
+  function sigUrl(sig) {
+    return firstOf(sig, 'sourceUrl', 'url', 'source', 'href', 'link') || '';
+  }
+  function sigThumbUrl(sig) {
+    return firstOf(sig, 'thumbnailUrl', 'thumbnail', 'image', 'imageUrl', 'img') || '';
+  }
+
+  // Mirror of store.js platformFromHost (same mapping); '' host -> 'Web'.
+  function platformFromHost(url) {
+    var v = String(url || '').trim();
+    if (!v) return '';
+    var host = '';
+    try {
+      host = new URL(v).hostname.toLowerCase().replace(/^www\./, '');
+    } catch (e) {
+      return '';
+    }
+    if (!host) return '';
+    var map = [
+      ['instagram.com', 'Instagram'],
+      ['tiktok.com', 'TikTok'],
+      ['pinterest.', 'Pinterest'],
+      ['behance.net', 'Behance'],
+      ['dribbble.com', 'Dribbble'],
+      ['youtube.com', 'YouTube'],
+      ['youtu.be', 'YouTube'],
+      ['twitter.com', 'X / Twitter'],
+      ['x.com', 'X / Twitter'],
+      ['threads.net', 'Threads'],
+      ['vimeo.com', 'Vimeo'],
+      ['are.na', 'Are.na'],
+      ['arena.com', 'Are.na'],
+      ['medium.com', 'Medium'],
+      ['substack.com', 'Substack'],
+      ['reddit.com', 'Reddit'],
+      ['wgsn.com', 'WGSN'],
+      ['notjustalabel', 'NJAL'],
+      ['cosmos.so', 'Cosmos'],
+      ['savee.it', 'Savee']
+    ];
+    for (var i = 0; i < map.length; i++) {
+      if (host.indexOf(map[i][0]) !== -1) return map[i][1];
+    }
+    var parts = host.split('.');
+    var base = parts.length >= 2 ? parts[parts.length - 2] : host;
+    if (!base) return '';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+
+  function sigPlatform(sig) {
+    var p = firstOf(sig, 'platform');
+    if (p) return String(p).trim();
+    var fromUrl = platformFromHost(sigUrl(sig));
+    return fromUrl || 'Web';
+  }
+
+  // Resolve a card's member signalIds against the index, in card order.
+  function resolveMembers(card, index) {
+    var out = [];
+    if (!index) return out;
+    cardSignals(card).forEach(function (ref) {
+      var id = (ref && typeof ref === 'object') ? cardId(ref) : ref;
+      if (id === undefined || id === null) return;
+      var sig = index.byId[String(id)];
+      if (sig) out.push(sig);
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Inline-SVG placeholder (ported from ingestion.js; module-private copy
+   * so user cards show designed imagery instead of letter-only monograms).
+   * ------------------------------------------------------------------ */
+
+  function hashStr(str) {
+    var h = 5381;
+    str = String(str || '');
+    for (var i = 0; i < str.length; i++) {
+      h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+  }
+
+  function placeholderSvg(text) {
+    var h = hashStr(text);
+    var hue = h % 360;
+    var hue2 = (hue + 40) % 360;
+    var label = esc(initials(text));
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="' + label + '">' +
+        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0" stop-color="hsl(' + hue + ',62%,46%)"/>' +
+          '<stop offset="1" stop-color="hsl(' + hue2 + ',58%,32%)"/>' +
+        '</linearGradient></defs>' +
+        '<rect width="320" height="200" fill="url(#g)"/>' +
+        '<text x="160" y="112" text-anchor="middle" font-family="' +
+          '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif" ' +
+          'font-size="72" font-weight="700" fill="rgba(255,255,255,0.92)">' + label + '</text>' +
+      '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  /* ------------------------------------------------------------------ *
    * Rendering — shared card bits
    * ------------------------------------------------------------------ */
 
-  function thumbHtml(card, cls) {
-    var thumb = cardThumb(card);
+  // Emit an <img> with the standard onerror->monogram fallback span.
+  function imgWithFallback(src, cls, alt, fallbackLabel) {
+    return '<img class="' + (cls || 'td-thumb') + '" src="' + esc(src) +
+      '" alt="' + esc(alt) + '" loading="lazy" ' +
+      'onerror="this.style.display=&#39;none&#39;;this.nextSibling&amp;&amp;(this.nextSibling.style.display=&#39;flex&#39;);">' +
+      '<span class="' + (cls || 'td-thumb') + ' td-thumb-fallback" style="display:none">' +
+      esc(initials(fallbackLabel)) + '</span>';
+  }
+
+  function thumbHtml(card, cls, index) {
     var label = cardLabel(card);
-    if (thumb) {
-      return '<img class="' + (cls || 'td-thumb') + '" src="' + esc(thumb) +
-        '" alt="' + esc(label) + '" loading="lazy" ' +
-        'onerror="this.style.display=&#39;none&#39;;this.nextSibling&amp;&amp;(this.nextSibling.style.display=&#39;flex&#39;);">' +
-        '<span class="' + (cls || 'td-thumb') + ' td-thumb-fallback" style="display:none">' +
-        esc(initials(label)) + '</span>';
+    // (1) Explicit card thumbnail wins (preserves the sample round).
+    var thumb = cardThumb(card);
+    if (thumb) return imgWithFallback(thumb, cls, label, label);
+
+    // (2..4) Resolve member signals against the active round's signal index.
+    var members = resolveMembers(card, index);
+    if (members.length) {
+      // (2) First member with a real thumbnail URL.
+      for (var i = 0; i < members.length; i++) {
+        var t = sigThumbUrl(members[i]);
+        if (t) return imgWithFallback(t, cls, label, label);
+      }
+      // (3) Deterministic inline-SVG placeholder from the first member's theme.
+      var seed = sigTheme(members[0]) || label;
+      return imgWithFallback(placeholderSvg(seed), cls, label, label);
     }
+
+    // (4) No resolvable members -> letter monogram (the only remaining path).
     return '<span class="' + (cls || 'td-thumb') + ' td-thumb-fallback">' +
       esc(initials(label)) + '</span>';
   }
@@ -408,26 +550,34 @@
     return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
   }
 
-  function sourcesHtml(card) {
+  function sourcesHtml(card, index) {
+    // (1) Explicit sources map/array on the card wins (preserves the sample).
     var sources = cardSources(card);
-    var signals = cardSignals(card);
-    if (!sources.length && signals.length) {
-      // Fall back to labeled link chips from raw signals.
-      return signals.slice(0, 4).map(function (sig) {
-        var label, url;
-        if (typeof sig === 'string') { label = sig; url = ''; }
-        else {
-          label = firstOf(sig, 'theme', 'label', 'title', 'name') || 'signal';
-          url = firstOf(sig, 'url', 'source', 'href') || '';
-        }
-        if (url) {
-          return '<a class="td-chip" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-            esc(label) + '</a>';
-        }
-        return '<span class="td-chip">' + esc(label) + '</span>';
+    if (sources.length) {
+      return sources.map(function (s) {
+        return '<span class="td-chip">' + esc(s.label) +
+          (s.count > 1 ? ' <b>' + s.count + '</b>' : '') + '</span>';
       }).join('');
     }
-    return sources.map(function (s) {
+
+    // (2) Resolve member signalIds against the active round's signals and
+    // render a live platform breakdown. A string id that does not resolve to a
+    // member signal is skipped silently — never rendered verbatim.
+    var members = resolveMembers(card, index);
+    if (!members.length) return '';
+
+    var counts = {};
+    members.forEach(function (sig) {
+      var p = sigPlatform(sig);
+      counts[p] = (counts[p] || 0) + 1;
+    });
+    var rows = Object.keys(counts).map(function (p) {
+      return { label: p, count: counts[p] };
+    }).sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label).localeCompare(String(b.label));
+    });
+    return rows.map(function (s) {
       return '<span class="td-chip">' + esc(s.label) +
         (s.count > 1 ? ' <b>' + s.count + '</b>' : '') + '</span>';
     }).join('');
@@ -436,6 +586,31 @@
   /* ------------------------------------------------------------------ *
    * Rendering — Dashboard view
    * ------------------------------------------------------------------ */
+
+  // Admin governance strip: Close/reopen voting + dept suppression threshold.
+  // Inert (read-only note) for the bundled sample round.
+  function adminStripHtml(settings, isSample) {
+    if (isSample) {
+      return '<p class="td-muted td-small">Example data — round controls are ' +
+        'disabled. Start your own round to close voting or change the ' +
+        'suppression threshold.</p>';
+    }
+    var closed = !!settings.roundClosed;
+    var threshold = numberOr(settings.deptSuppressionThreshold, 3);
+    var html = '<div class="td-admin" role="group" aria-label="Round controls">';
+    html += '<div class="td-admin-cluster">';
+    html += '<button type="button" class="td-btn" id="td-toggle-closed" aria-pressed="' +
+      (closed ? 'true' : 'false') + '">' +
+      (closed ? 'Reopen voting' : 'Close voting') + '</button>';
+    html += '<span class="td-admin-status ' + (closed ? 'closed' : 'open') + '">' +
+      (closed ? 'Voting closed' : 'Voting open') + '</span>';
+    html += '</div>';
+    html += '<label class="td-admin-field">Suppress departments under ' +
+      '<input type="number" id="td-dept-threshold" min="0" max="99" step="1" ' +
+      'inputmode="numeric" value="' + threshold + '"> voters</label>';
+    html += '</div>';
+    return html;
+  }
 
   function resolveMount(container) {
     if (container && container.nodeType === 1) return container;
@@ -457,7 +632,6 @@
     if (!round || !(round.cards && round.cards.length)) {
       mount.innerHTML =
         '<section class="td-dashboard td-empty">' +
-        '<h2>Consensus dashboard</h2>' +
         '<p class="td-muted">No trend cards yet. Add signals, group them into ' +
         'trend cards, and collect votes to populate the dashboard.</p>' +
         '</section>';
@@ -468,20 +642,24 @@
     var deptData = computeDepartments(round);
     var t = totals(round);
     var settings = getSettings(round);
-    var sampleBadge = isSampleRound(round)
+    var index = buildSignalIndex(round);
+    var isSample = isSampleRound(round);
+    var sampleBadge = isSample
       ? '<span class="td-badge td-badge-sample">Example data</span>' : '';
 
     var html = '';
     html += '<section class="td-dashboard">';
     html += '<header class="td-dash-head">';
-    html += '<div><h2>Consensus dashboard ' + sampleBadge + '</h2>';
-    html += '<p class="td-muted">' + t.cards + ' trend cards · ' + t.signals +
+    html += '<div><p class="td-muted">' + t.cards + ' trend cards · ' + t.signals +
       ' signals · ' + t.votes + ' votes' +
-      (settings.roundClosed ? ' · <strong>round closed</strong>' : '') + '</p></div>';
+      (settings.roundClosed ? ' · <strong>round closed</strong>' : '') +
+      (sampleBadge ? ' ' + sampleBadge : '') + '</p></div>';
     html += '<div class="td-dash-actions">';
     html += '<button type="button" class="td-btn td-btn-primary" id="td-export-brief">Export Trend Brief</button>';
     html += '<button type="button" class="td-btn" id="td-export-pdf">Download PDF</button>';
     html += '</div></header>';
+
+    html += adminStripHtml(settings, isSample);
 
     if (t.votes === 0) {
       html += '<p class="td-notice">No votes recorded yet — the leaderboard below ' +
@@ -496,7 +674,7 @@
       var score = cardScore(card);
       html += '<li class="td-lb-row">';
       html += '<span class="td-rank">' + row.rank + '</span>';
-      html += thumbHtml(card, 'td-thumb');
+      html += thumbHtml(card, 'td-thumb', index);
       html += '<div class="td-lb-body">';
       html += '<div class="td-lb-head"><span class="td-lb-label">' +
         esc(cardLabel(card)) + '</span>';
@@ -513,7 +691,7 @@
       if (rationale) {
         html += '<p class="td-rationale">' + esc(rationale) + '</p>';
       }
-      var chips = sourcesHtml(card);
+      var chips = sourcesHtml(card, index);
       if (chips) html += '<div class="td-chips">' + chips + '</div>';
       html += '</div></li>';
     });
@@ -561,6 +739,37 @@
     if (exportBtn) exportBtn.addEventListener('click', function () { exportBrief(); });
     var pdfBtn = mount.querySelector('#td-export-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', function () { exportPDF(); });
+
+    // --- Admin governance controls (live rounds only) ---
+    var toggleBtn = mount.querySelector('#td-toggle-closed');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        var s = getStore();
+        if (!s || typeof s.setRoundClosed !== 'function') return;
+        var current = getSettings(getRound()).roundClosed;
+        try { s.setRoundClosed(null, !current); } catch (e) { return; }
+        render(mount);
+      });
+    }
+
+    var threshInput = mount.querySelector('#td-dept-threshold');
+    if (threshInput) {
+      threshInput.addEventListener('change', function () {
+        var s = getStore();
+        if (!s || typeof s.setDeptThreshold !== 'function') return;
+        var raw = threshInput.value;
+        var n = parseInt(raw, 10);
+        if (raw === '' || isNaN(n)) {
+          // Restore the field to the stored value; do not write a bad value.
+          threshInput.value = numberOr(getSettings(getRound()).deptSuppressionThreshold, 3);
+          return;
+        }
+        if (n < 0) n = 0;
+        if (n > 99) n = 99;
+        try { s.setDeptThreshold(null, n); } catch (e) { return; }
+        render(mount);
+      });
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -573,6 +782,7 @@
     var deptData = computeDepartments(round);
     var t = totals(round);
     var settings = getSettings(round);
+    var index = buildSignalIndex(round);
     var roundName = firstOf(round, 'name', 'title', 'label') || 'Studio Trend Round';
     var dateStr = formatBriefDate(firstOf(round, 'date', 'createdAt', 'created'));
     var winners = leaderboard.slice(0, 5);
@@ -604,7 +814,7 @@
       var card = row.card;
       html += '<div class="brief-winner">';
       html += '<div class="brief-winner-rank">' + row.rank + '</div>';
-      html += thumbHtml(card, 'brief-thumb');
+      html += thumbHtml(card, 'brief-thumb', index);
       html += '<div class="brief-winner-body">';
       html += '<div class="brief-winner-head"><span class="brief-winner-label">' +
         esc(cardLabel(card)) + '</span><span class="brief-winner-rate">' +
@@ -614,6 +824,8 @@
         row.appearances + ' appearances</div>';
       var rationale = cardRationale(card);
       if (rationale) html += '<p class="brief-rationale">' + esc(rationale) + '</p>';
+      var chips = sourcesHtml(card, index);
+      if (chips) html += '<div class="td-chips">' + chips + '</div>';
       html += '</div></div>';
     });
     html += '</div>';

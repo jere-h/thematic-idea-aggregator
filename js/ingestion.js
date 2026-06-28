@@ -85,8 +85,28 @@
 
   function newRound(name) {
     var s = store();
+
+    // Capture the currently-active round BEFORE creating the new one so we can
+    // truly replace it (the confirm copy promises a replacement). Only the
+    // roundId-first store.js path accumulates orphaned rounds; the payload-first
+    // / store-less fallback below keeps its single-round behavior untouched.
+    var prevId = (s && typeof s.getActiveRoundId === 'function')
+      ? s.getActiveRoundId() : null;
+    var prevRound = (prevId && typeof s.getRound === 'function')
+      ? s.getRound(prevId) : null;
+
     var created = call(s, ['newRound', 'createRound', 'resetRound', 'startRound'], [name]);
-    if (created && typeof created === 'object') return created;
+    if (created && typeof created === 'object') {
+      // Delete the previously-active round only when it is a real user round
+      // (never the bundled sample, never the just-created round). The sample's
+      // dedicated clear affordance lives in the sample banner.
+      if (prevId && created.id !== prevId && prevRound &&
+          !prevRound.isSample && !prevRound.sample &&
+          typeof s.deleteRound === 'function') {
+        try { s.deleteRound(prevId); } catch (e) { /* leave orphan rather than crash */ }
+      }
+      return created;
+    }
     // Fallback: build an empty round and persist it.
     var round = {
       id: 'round-' + nowStamp(),
@@ -732,12 +752,15 @@
     var skipped = 0;
     var seen = Object.create(null);
     var existing = readSignals();
-    existing.forEach(function (s) { seen[dedupeKey(s.theme, s.source)] = true; });
+    // Key existing signals through the same accessors used for incoming rows so
+    // store-normalized signals (which carry sourceUrl, not source) dedupe
+    // like-for-like and a re-import after reload does not double every row.
+    existing.forEach(function (s) { seen[dedupeKey(sigTheme(s), sigSource(s))] = true; });
 
     for (var i = 0; i < rows.length; i++) {
       var signal = makeSignal(rows[i]);
       if (!signal) { skipped++; continue; }
-      var key = dedupeKey(signal.theme, signal.source);
+      var key = dedupeKey(sigTheme(signal), sigSource(signal));
       if (seen[key]) { skipped++; continue; }
       seen[key] = true;
       accepted.push(signal);

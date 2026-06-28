@@ -722,10 +722,10 @@
       '<div class="cards-view">' +
         '<header class="view-head">' +
           '<div>' +
-            '<h2>Trend cards ' + sampleBadge + '</h2>' +
             '<p class="muted">' + cards.length + ' card' + (cards.length === 1 ? '' : 's') +
               ' \u00b7 ' + signals.length + ' signal' + (signals.length === 1 ? '' : 's') +
-              ' \u00b7 ' + ungrouped.length + ' ungrouped \u00b7 suggested target ~' + target + ' cards</p>' +
+              ' \u00b7 ' + ungrouped.length + ' ungrouped \u00b7 suggested target ~' + target + ' cards' +
+              (sampleBadge ? ' ' + sampleBadge : '') + '</p>' +
           '</div>' +
           '<div class="view-actions">' +
             '<button class="btn btn--secondary" type="button" data-action="toggle-import">' +
