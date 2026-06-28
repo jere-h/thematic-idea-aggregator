@@ -325,6 +325,110 @@
       }
     }
 
+    // If the URL hash carries a "share=" token, decode it, confirm with the
+    // user (so an incoming round can never silently clobber or merge into local
+    // data), import it via the existing Store API, strip the token, and route to
+    // the Vote view. Returns true only when a share was consumed. Any malformed
+    // token or cancellation falls through to a normal boot without throwing.
+    function maybeConsumeShare() {
+      var hash = window.location.hash || '';
+      if (hash.indexOf('share=') < 0) return false;
+      var s = trendStore();
+      if (!s || typeof s.decodeShareLink !== 'function') {
+        stripShareFragment('#/' + DEFAULT_ROUTE);
+        return false;
+      }
+
+      function stripShareFragment(targetHash) {
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(
+            null, '',
+            window.location.pathname + window.location.search + targetHash
+          );
+        } else {
+          window.location.hash = targetHash;
+        }
+      }
+
+      var preview = null;
+      try {
+        preview = s.decodeShareLink(hash);
+      } catch (err) {
+        preview = null;
+      }
+      if (!preview) {
+        window.TrendDeck.toast('That share link could not be read — it may be corrupted or truncated.');
+        stripShareFragment('#/' + DEFAULT_ROUTE);
+        return false;
+      }
+
+      var name = preview.name || 'Untitled Round';
+      var active = null;
+      try { active = s.getActiveRound(); } catch (e) { active = null; }
+      var hasLocalData = !!(active && (
+        (active.signals && active.signals.length) ||
+        (active.cards && active.cards.length) ||
+        (active.votes && active.votes.length)
+      ));
+      var localIsSample = !!(active && (active.isSample || active.sample));
+      var incomingSameId = !!(active && preview.id && active.id === preview.id);
+
+      var opts = {};
+      var proceed = true;
+      if (!hasLocalData) {
+        // Fresh/empty round — safe to import directly, no confirm.
+        opts = {};
+      } else if (localIsSample) {
+        proceed = window.confirm(
+          'Open the shared round “' + name + '”?\n\n' +
+          'This replaces the example data currently loaded.'
+        );
+        opts = { mode: 'new' };
+      } else if (incomingSameId) {
+        proceed = window.confirm(
+          'Merge the shared round “' + name + '” into your current round?\n\n' +
+          'New signals, cards and votes will be added; duplicate votes (matched by id) are not double-counted. Your existing data is kept.'
+        );
+        opts = {};
+      } else {
+        proceed = window.confirm(
+          'Open the shared round “' + name + '”?\n\n' +
+          'It will be added as a separate round and become active. Your current round is kept.'
+        );
+        opts = { mode: 'new' };
+      }
+
+      if (!proceed) {
+        window.TrendDeck.toast('Share import cancelled.');
+        stripShareFragment('#/' + DEFAULT_ROUTE);
+        return false;
+      }
+
+      var result = null;
+      try {
+        result = s.consumeShareFromLocation(opts);
+      } catch (err) {
+        result = null;
+      }
+      if (!result || !result.ok) {
+        window.TrendDeck.toast('That share link could not be read — it may be corrupted or truncated.');
+        stripShareFragment('#/' + DEFAULT_ROUTE);
+        return false;
+      }
+
+      var r = result.round || {};
+      var sCount = (r.signals && r.signals.length) || 0;
+      var cCount = (r.cards && r.cards.length) || 0;
+      var vCount = (r.votes && r.votes.length) || 0;
+      var summary = 'Imported “' + name + '” — ' +
+        sCount + ' signals, ' + cCount + ' cards, ' + vCount + ' votes' +
+        (result.mode === 'merge' && typeof result.votesAdded === 'number'
+          ? ' (' + result.votesAdded + ' new votes merged)' : '') + '.';
+      window.TrendDeck.toast(summary, 4000);
+      stripShareFragment('#/vote');
+      return true;
+    }
+
     function boot() {
       // Ensure storage is seeded (store.js seeds the bundled sample on first run).
       try {
@@ -335,6 +439,7 @@
       } catch (err) {
         console.error('TrendDeck: store init failed', err);
       }
+      maybeConsumeShare();
       wireChrome();
       if (!window.location.hash) {
         window.location.replace('#/' + DEFAULT_ROUTE);

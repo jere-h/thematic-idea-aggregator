@@ -209,14 +209,60 @@
     return round;
   }
 
+  // Derive a friendly platform label from a URL host. Dependency-free mirror
+  // of ingestion.platformFromUrl's intent; returns '' (NOT 'Other') when there
+  // is no usable host so the display layers decide on a fallback.
+  function platformFromHost(url) {
+    var v = String(url || '').trim();
+    if (!v) return '';
+    var host = '';
+    try {
+      host = new URL(v).hostname.toLowerCase().replace(/^www\./, '');
+    } catch (e) {
+      return '';
+    }
+    if (!host) return '';
+    var map = [
+      ['instagram.com', 'Instagram'],
+      ['tiktok.com', 'TikTok'],
+      ['pinterest.', 'Pinterest'],
+      ['behance.net', 'Behance'],
+      ['dribbble.com', 'Dribbble'],
+      ['youtube.com', 'YouTube'],
+      ['youtu.be', 'YouTube'],
+      ['twitter.com', 'X / Twitter'],
+      ['x.com', 'X / Twitter'],
+      ['threads.net', 'Threads'],
+      ['vimeo.com', 'Vimeo'],
+      ['are.na', 'Are.na'],
+      ['arena.com', 'Are.na'],
+      ['medium.com', 'Medium'],
+      ['substack.com', 'Substack'],
+      ['reddit.com', 'Reddit'],
+      ['wgsn.com', 'WGSN'],
+      ['notjustalabel', 'NJAL'],
+      ['cosmos.so', 'Cosmos'],
+      ['savee.it', 'Savee']
+    ];
+    for (var i = 0; i < map.length; i++) {
+      if (host.indexOf(map[i][0]) !== -1) return map[i][1];
+    }
+    var parts = host.split('.');
+    var base = parts.length >= 2 ? parts[parts.length - 2] : host;
+    if (!base) return '';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+
   function normalizeSignal(sig) {
     if (!isObject(sig)) sig = {};
+    var sourceUrl = String(sig.sourceUrl || sig.url || sig.source || sig.link || sig.href || '').trim();
+    var platform = String(sig.platform || '').trim();
     return {
       id: sig.id || uid('sig'),
       theme: String(sig.theme || sig.label || sig.title || '').trim(),
-      sourceUrl: String(sig.sourceUrl || sig.url || '').trim(),
+      sourceUrl: sourceUrl,
       thumbnailUrl: String(sig.thumbnailUrl || sig.thumbnail || sig.image || '').trim(),
-      platform: String(sig.platform || sig.source || '').trim(),
+      platform: platform || platformFromHost(sourceUrl),
       note: String(sig.note || '').trim(),
       createdAt: sig.createdAt || nowISO()
     };

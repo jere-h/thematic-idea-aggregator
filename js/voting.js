@@ -478,7 +478,6 @@
       return '<span class="vote-card__source">' + escapeHtml(s) + '</span>';
     }).join('');
     var rationale = cardRationale(card);
-    var score = card && (card.score || card.compositeScore || card.composite_score);
 
     return '' +
       '<button type="button" class="vote-card vote-card--' + side + '" ' +
@@ -487,9 +486,6 @@
       cardThumb(card) +
       '  <span class="vote-card__body">' +
       '    <span class="vote-card__label">' + escapeHtml(cardLabel(card)) + '</span>' +
-      (score !== undefined && score !== null && score !== ''
-        ? '    <span class="vote-card__score">Score ' + escapeHtml(score) + '</span>'
-        : '') +
       (rationale
         ? '    <span class="vote-card__rationale">' + escapeHtml(rationale) + '</span>'
         : '') +

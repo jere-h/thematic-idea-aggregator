@@ -1857,12 +1857,6 @@ textarea:focus {
   font-weight: 700;
 }
 
-.vote-card__score {
-  font-size: 0.78rem;
-  color: var(--text-faint);
-  font-family: var(--mono);
-}
-
 .vote-card__rationale {
   font-size: 0.85rem;
   color: var(--text-dim);
@@ -1974,113 +1968,6 @@ textarea:focus {
   flex-wrap: wrap;
   justify-content: center;
   margin-top: 1.2rem;
-}
-
-/* ---------- Dashboard / leaderboard ---------- */
-.leaderboard {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.lb-row {
-  display: grid;
-  grid-template-columns: 40px 56px 1fr auto;
-  gap: 0.85rem;
-  align-items: center;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0.6rem 0.85rem;
-  position: relative;
-  overflow: hidden;
-}
-
-.lb-row .winbar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(90deg, rgba(110, 168, 254, 0.16), rgba(182, 146, 255, 0.08));
-  z-index: 0;
-}
-
-.lb-row > * {
-  position: relative;
-  z-index: 1;
-}
-
-.lb-rank {
-  font-weight: 800;
-  font-size: 1.1rem;
-  text-align: center;
-  color: var(--text-faint);
-}
-
-.lb-row.r1 .lb-rank {
-  color: var(--gold);
-}
-
-.lb-row.r2 .lb-rank {
-  color: var(--silver);
-}
-
-.lb-row.r3 .lb-rank {
-  color: var(--bronze);
-}
-
-.lb-row.r1 {
-  border-color: rgba(255, 210, 74, 0.4);
-}
-
-.lb-thumb {
-  width: 56px;
-  height: 56px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-}
-
-.lb-main {
-  min-width: 0;
-}
-
-.lb-label {
-  font-weight: 650;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lb-sub {
-  font-size: 0.78rem;
-  color: var(--text-faint);
-}
-
-.lb-stats {
-  text-align: right;
-}
-
-.lb-winrate {
-  font-weight: 800;
-  font-size: 1.2rem;
-}
-
-.lb-winrate.high {
-  color: var(--good);
-}
-
-.lb-winrate.mid {
-  color: var(--warn);
-}
-
-.lb-winrate.low {
-  color: var(--text-dim);
-}
-
-.lb-counts {
-  font-size: 0.74rem;
-  color: var(--text-faint);
-  font-family: var(--mono);
 }
 
 /* ---------- Dashboard: win-rate leaderboard ---------- */
@@ -2253,6 +2140,142 @@ a.td-chip:hover {
 .td-muted { color: var(--text-dim); }
 .td-small { font-size: 0.78rem; font-weight: 400; }
 
+/* Dashboard header + export action buttons */
+.td-dash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.td-dash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.td-btn {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  padding: 0.5rem 0.95rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.08s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.td-btn:hover {
+  background: #262b35;
+  border-color: #46506280;
+}
+
+.td-btn:active {
+  transform: translateY(1px);
+}
+
+.td-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.td-btn-primary {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-2));
+  border-color: transparent;
+  color: #0a0f1c;
+  box-shadow: var(--shadow-sm);
+}
+
+.td-btn-primary:hover {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-2));
+}
+
+/* By-department breakdown grid */
+.td-dept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.2rem;
+}
+
+.td-dept-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.td-dept-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.td-dept-head strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.td-dept-head .td-muted {
+  font-size: 0.78rem;
+  font-family: var(--mono);
+}
+
+.td-dept-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.td-dept-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.td-dept-cardlabel {
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.td-dept-rate {
+  flex: none;
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.td-suppressed {
+  margin-top: 0.8rem;
+  color: var(--text-faint);
+}
+
 @media (max-width: 560px) {
   .td-lb-row {
     grid-template-columns: auto auto 1fr;
@@ -2265,44 +2288,20 @@ a.td-chip:hover {
     width: 48px;
     height: 34px;
   }
-}
-
-/* dept breakdown table */
-.dept-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.dept-table th,
-.dept-table td {
-  padding: 0.45rem 0.6rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-
-.dept-table th {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
-.dept-table td.num {
-  text-align: right;
-  font-family: var(--mono);
-}
-
-.dept-table tr.suppressed td {
-  color: var(--text-faint);
-  font-style: italic;
-}
-
-.suppressed-note {
-  font-size: 0.78rem;
-  color: var(--text-faint);
-  margin-top: 0.6rem;
+  .td-dept-grid {
+    grid-template-columns: 1fr;
+  }
+  .td-dash-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .td-dash-actions {
+    width: 100%;
+  }
+  .td-dash-actions .td-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
 }
 
 .mini-bar {
@@ -2709,16 +2708,6 @@ a.td-chip:hover {
   body.is-printing #td-print-root,
   body.is-printing #td-print-root * {
     visibility: visible;
-  }
-
-  /* Brief VIEW path (no #td-print-root injected): the brief lives inside
-     #view-brief; keep it visible and drop its toolbar. */
-  body.is-printing #view-brief {
-    display: block !important;
-  }
-
-  body.is-printing #view-brief .td-brief-toolbar {
-    display: none !important;
   }
 
   /* Print paper styling for the real container. */

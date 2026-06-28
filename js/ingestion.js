@@ -213,7 +213,9 @@
     return {
       id: input.id ? String(input.id) : genId(),
       theme: theme,
+      sourceUrl: source,
       source: source,
+      thumbnailUrl: thumb,
       thumbnail: thumb,
       platform: platformFromUrl(source),
       createdAt: new Date().toISOString()

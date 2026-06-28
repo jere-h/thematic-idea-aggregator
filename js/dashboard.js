@@ -693,8 +693,7 @@
 
     var printBtn = mount.querySelector('#td-brief-print');
     if (printBtn) printBtn.addEventListener('click', function () {
-      document.body.classList.add('is-printing');
-      window.print();
+      exportBrief();
     });
     var pdfBtn = mount.querySelector('#td-brief-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', function () { exportPDF(); });
